@@ -235,6 +235,22 @@ export interface IFFData {
   radarSignatureMatch: number;
 }
 
+export interface JammingEffect {
+  sourceId: string;
+  strength: number;
+  rangeKm: number;
+  frequencyBand: 'X_BAND' | 'S_BAND' | 'KU_BAND' | 'WIDEBAND';
+  effectiveAgainstRCS: number;
+}
+
+export interface RWRAlert {
+  radarType: string;
+  bearing: number;
+  distance: number;
+  threat: 'SAM' | 'AAA' | 'FIGHTER' | 'UNKNOWN';
+  lockOn: boolean;
+}
+
 export enum FormationType {
   VIC = 'VIC',
   LINE = 'LINE',
