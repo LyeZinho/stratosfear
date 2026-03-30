@@ -51,7 +51,27 @@ export enum BuildingType {
   FUEL_DEPOT = 'FUEL_DEPOT',
   RUNWAY = 'RUNWAY',
   REFINERY = 'REFINERY',
-  SUPPLY_DEPOT = 'SUPPLY_DEPOT'
+  SUPPLY_DEPOT = 'SUPPLY_DEPOT',
+  INFRASTRUCTURE = 'INFRASTRUCTURE'
+}
+
+export interface InfrastructureSpecification {
+  id: string;
+  name: string;
+  category: 'Radar' | 'Defence' | 'Communications' | 'Logistics' | 'Command';
+  costCredits: number;
+  buildTimeSeconds: number;
+  maintenanceCostPerHour: number;
+  healthPoints: number;
+  bonusEffect: {
+    radarRangeMultiplier?: number;
+    detectionRateBonus?: number;
+    jammerStrength?: number;
+    refuelSpeed?: number;
+    commandCenterRange?: number;
+  };
+  requiredTechs?: string[];
+  description: string;
 }
 
 export interface BaseSpecification {
