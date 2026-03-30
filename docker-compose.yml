@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   stratosfear:
     build:
@@ -7,16 +5,13 @@ services:
       dockerfile: Dockerfile
     container_name: stratosfear-game
     ports:
-      - "${PORT:-6959}:6959"
+      - "6959:6959"
       - "6969:6969"
     environment:
       - NODE_ENV=production
-      - PORT=${PORT:-6959}
-      - VITE_API_URL=http://localhost:${PORT:-6959}
+      - PORT=6959
+      - VITE_API_URL=http://localhost:6959
       - VITE_GAME_SPEED=1.0
-    volumes:
-      - ./concept_base:/app/concept_base:ro
-      - ./dist:/app/dist:ro
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:6959"]
