@@ -31,7 +31,8 @@ export enum MissionType {
   CARGO = 'CARGO',
   DEFENSE = 'DEFENSE',
   LOITER = 'LOITER',
-  RECON = 'RECON'
+  RECON = 'RECON',
+  SEAD = 'SEAD'
 }
 
 export enum MissileType {
