@@ -37,8 +37,12 @@ export enum MissionType {
 export enum MissileType {
   SHORT_RANGE = 'SHORT_RANGE',
   MEDIUM_RANGE = 'MEDIUM_RANGE',
-  LONG_RANGE = 'LONG_RANGE'
+  LONG_RANGE = 'LONG_RANGE',
+  SEAD = 'SEAD',
+  GROUND_ATTACK = 'GROUND_ATTACK'
 }
+
+export type SeekerType = 'IR' | 'RADAR_ACTIVE' | 'PASSIVE_RADAR' | 'LASER' | 'TV_IR' | 'NONE';
 
 export enum BuildingType {
   HANGAR = 'HANGAR',
@@ -51,22 +55,27 @@ export enum BuildingType {
 }
 
 export interface BaseSpecification {
+  id: string;
   model: string;
-  manufacturer: string;
-  role: 'Fighter' | 'Bomber' | 'Transport' | 'AWACS' | 'Recon' | 'Ground';
+  manufacturer?: string;
+  role: 'Fighter' | 'Bomber' | 'Transport' | 'AWACS' | 'Recon' | 'Ground' | 'Multi-role' | 'Interceptor' | 'Superiority' | 'Strike' | 'UAV';
   maxSpeedMach: number;
   radarRangeKm: number;
   fuelCapacityL: number;
   fuelConsumptionBase: number;
-  maxAltitudeFt: number;
+  maxAltitudeFt?: number;
   missileCapacity: Record<string, number>;
   gunAmmo: number;
   flaresCapacity: number;
   countermeasuresCapacity: number;
-  rcsFortal: number;
-  rcsSide: number;
-  stealthFactor: number;
+  rcsFrontal?: number;
+  rcsLateral?: number;
+  rcsFrontalAlternate?: number;
+  stealthFactor?: number;
+  ecmStrength?: number;
 }
+
+export type AircraftSpecification = BaseSpecification;
 
 export interface Aircraft {
   id: string;
@@ -115,12 +124,18 @@ export interface Missile {
 }
 
 export interface MissileSpec {
+  id: string;
   model: string;
   type: MissileType;
   speed: number;
   rangeMax: number;
   reloadTime: number;
+  seekerType?: SeekerType;
+  nez?: number; // No Escape Zone in km
+  cost?: number;
 }
+
+export type MissileSpecification = MissileSpec;
 
 export interface Building {
   id: string;
