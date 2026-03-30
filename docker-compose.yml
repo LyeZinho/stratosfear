@@ -15,7 +15,6 @@ services:
     networks:
       - coolify
     labels:
-      - "traefik.enable=true"
       - "traefik.http.services.stratosfear.loadbalancer.server.port=6959"
     restart: unless-stopped
     healthcheck:
