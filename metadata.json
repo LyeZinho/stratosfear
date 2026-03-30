@@ -1,0 +1,5 @@
+{
+  "name": "Air Strike: Tactical Defense",
+  "description": "Simulador tático de defesa aérea baseado em geolocalização real. Defenda sua base usando radares e interceptadores reais.",
+  "requestFramePermissions": ["geolocation"]
+}
