@@ -24,13 +24,15 @@ services:
       retries: 3
       start_period: 60s
     labels:
-      - "traefik.enable=true"
+      - traefik.enable=true
       - "traefik.http.routers.stratosfear.rule=Host(`${SERVICE_FQDN_STRATOSFEAR:-stratosfear.localhost}`)"
-      - "traefik.http.routers.stratosfear.entrypoints=https"
-      - "traefik.http.routers.stratosfear.tls=true"
-      - "traefik.http.routers.stratosfear.tls.certresolver=letsencrypt"
-      - "traefik.http.services.stratosfear.loadbalancer.server.port=9347"
+      - traefik.http.routers.stratosfear.entrypoints=https
+      - traefik.http.routers.stratosfear.tls=true
+      - traefik.http.routers.stratosfear.tls.certresolver=letsencrypt
+      - traefik.http.services.stratosfear.loadbalancer.server.port=9347
+    networks:
+      - coolify
 
 networks:
-  default:
-    name: stratosfear-network
+  coolify:
+    external: true
