@@ -27,8 +27,8 @@
    ```
 
 4. **Access the game**
-   - Production build: http://localhost:3000
-   - Development mode: http://localhost:6969
+   - Production build: http://localhost:9347
+   - Development mode: http://localhost:9346
 
 5. **Check status**
    ```bash
@@ -52,8 +52,8 @@ docker build -t stratosfear:latest .
 # Run container
 docker run -d \
   --name stratosfear \
-  -p 3000:3000 \
-  -p 6969:6969 \
+  -p 9347:9347 \
+  -p 9346:9346 \
   -e NODE_ENV=production \
   stratosfear:latest
 
@@ -71,7 +71,7 @@ npm install
 # or
 pnpm install
 
-# Start dev server (port 6969)
+# Start dev server (port 9346)
 npm run dev
 
 # In another terminal, preview production build
@@ -104,7 +104,7 @@ gcloud run deploy stratosfear \
   --image gcr.io/PROJECT_ID/stratosfear \
   --platform managed \
   --region us-central1 \
-  --port 3000
+  --port 9347
 ```
 
 ### Heroku
@@ -122,9 +122,9 @@ git push heroku main
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `NODE_ENV` | `production` | Environment (development/production) |
-| `PORT` | `3000` | HTTP server port |
+| `PORT` | `9347` | HTTP server port |
 | `HOST` | `0.0.0.0` | Listen address |
-| `VITE_API_URL` | `http://localhost:3000` | API endpoint |
+| `VITE_API_URL` | `http://localhost:9347` | API endpoint |
 | `VITE_GAME_SPEED` | `1.0` | Game simulation speed multiplier |
 | `GEMINI_API_KEY` | (empty) | Optional: Gemini AI integration |
 
@@ -142,7 +142,7 @@ docker stats
 ### Nginx Reverse Proxy (Optional)
 ```nginx
 upstream stratosfear {
-  server localhost:3000;
+  server localhost:9347;
 }
 
 server {
@@ -166,7 +166,7 @@ server {
 ```bash
 docker-compose logs stratosfear
 # Check for port conflicts:
-sudo lsof -i :3000
+sudo lsof -i :9347
 ```
 
 ### Out of memory
@@ -188,7 +188,7 @@ docker-compose up --build
 The service includes a built-in health check:
 ```bash
 # Manual health check
-curl http://localhost:3000
+curl http://localhost:9347
 
 # Should return 200 if healthy
 ```

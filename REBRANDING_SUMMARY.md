@@ -27,10 +27,10 @@
 
 ### Docker Support
 ```bash
-# Production (port 3000)
+# Production (port 9347)
 docker-compose up -d
 
-# Development (port 6969)
+# Development (port 9346)
 docker-compose -f docker-compose.dev.yml up -d
 ```
 
@@ -95,7 +95,7 @@ All critical files verified:
 1. **Test Docker locally**
    ```bash
    docker-compose up -d
-   # Visit http://localhost:3000
+   # Visit http://localhost:9347
    ```
 
 2. **Deploy to cloud** (follow DEPLOYMENT.md guide)

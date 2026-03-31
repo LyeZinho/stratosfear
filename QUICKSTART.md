@@ -7,7 +7,7 @@
 # One command to start everything
 docker-compose up -d
 
-# Game is ready at http://localhost:3000
+# Game is ready at http://localhost:9347
 ```
 
 ### Option 2: Local Development
@@ -15,7 +15,7 @@ docker-compose up -d
 npm install
 npm run dev
 
-# Game runs at http://localhost:6969
+# Game runs at http://localhost:9346
 ```
 
 ### Option 3: Using Make (Linux/Mac)
@@ -44,7 +44,7 @@ make quick-dev       # Docker development
 
 ## 🎮 How to Play
 
-1. **Open the game** at http://localhost:3000 (Docker) or http://localhost:6969 (local)
+1. **Open the game** at http://localhost:9347 (Docker) or http://localhost:9346 (local)
 
 2. **Control Aircraft**
    - Click on an aircraft to select it
@@ -121,7 +121,7 @@ docker image prune -a
 Create `.env` file to customize:
 ```env
 NODE_ENV=production
-VITE_API_URL=http://localhost:3000
+VITE_API_URL=http://localhost:9347
 VITE_GAME_SPEED=1.0
 ```
 
@@ -129,7 +129,7 @@ Available variables:
 - `NODE_ENV`: development / production
 - `VITE_API_URL`: API endpoint
 - `VITE_GAME_SPEED`: Simulation speed (1.0 = normal, 2.0 = 2x speed)
-- `PORT`: Server port (default 3000)
+- `PORT`: Server port (default 9347)
 - `GEMINI_API_KEY`: Optional AI features
 
 ---
@@ -168,13 +168,13 @@ Available variables:
 
 ## 🐛 Troubleshooting
 
-### "Port 3000 already in use"
+### "Port 9347 already in use"
 ```bash
 # Find what's using it
-lsof -i :3000
+lsof -i :9347
 
 # Use different port
-PORT=3001 npm run preview
+PORT=9348 npm run preview
 ```
 
 ### "Docker container exits immediately"
@@ -191,7 +191,7 @@ docker update --memory=4g stratosfear
 
 ### "Game won't load"
 1. Check browser console (F12)
-2. Verify port is accessible: `curl http://localhost:3000`
+2. Verify port is accessible: `curl http://localhost:9347`
 3. Check firewall/antivirus blocking
 
 ---

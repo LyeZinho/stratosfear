@@ -7,10 +7,10 @@ services:
       dockerfile: Dockerfile
     container_name: stratosfear-dev
     ports:
-      - "6969:6969"
+      - "9346:9346"
     environment:
       - NODE_ENV=development
-      - VITE_API_URL=http://localhost:6969
+      - VITE_API_URL=http://localhost:9346
     volumes:
       - ./concept_base:/app/concept_base
       - ./dist:/app/dist

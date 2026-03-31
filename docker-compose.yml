@@ -5,24 +5,31 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        - NODE_ENV=development
     container_name: stratosfear-game
     ports:
-      - "3000:3000"
-      - "6969:6969"
+      - "9347:9347"
     environment:
       - NODE_ENV=production
-      - VITE_API_URL=http://localhost:3000
-      - VITE_GAME_SPEED=1.0
-    volumes:
-      - ./concept_base:/app/concept_base:ro
-      - ./dist:/app/dist:ro
+      - PORT=9347
+      - HOST=0.0.0.0
+      - VITE_GAME_SPEED=${VITE_GAME_SPEED:-1.0}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      test: ["CMD", "curl", "-f", "http://localhost:9347"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 40s
+      start_period: 60s
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.stratosfear.rule=Host(`${SERVICE_FQDN_STRATOSFEAR:-stratosfear.localhost}`)"
+      - "traefik.http.routers.stratosfear.entrypoints=https"
+      - "traefik.http.routers.stratosfear.tls=true"
+      - "traefik.http.routers.stratosfear.tls.certresolver=letsencrypt"
+      - "traefik.http.services.stratosfear.loadbalancer.server.port=9347"
 
 networks:
   default:

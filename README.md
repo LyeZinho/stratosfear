@@ -26,7 +26,7 @@ A real-time strategy game featuring Phase 16 STRATOSFEAR expansion with advanced
 # Install dependencies
 npm install
 
-# Start dev server (port 6969)
+# Start dev server (port 9346)
 npm run dev
 
 # Build for production
@@ -38,7 +38,7 @@ npm run build
 # Build and run with Docker Compose
 docker-compose up -d
 
-# Access at http://localhost:3000
+# Access at http://localhost:9347
 ```
 
 ## Project Structure
@@ -95,7 +95,7 @@ stratosfear/
 ### Environment Variables
 ```env
 # .env file
-VITE_API_URL=http://localhost:3000
+VITE_API_URL=http://localhost:9347
 VITE_GAME_SPEED=1.0
 ```
 
@@ -170,4 +170,4 @@ Proprietary - STRATOSFEAR © 2026
 
 **Latest Update**: Legal System Integration (Tribunal de Estratosfera)  
 **Status**: Alpha (Phase 16 Complete)  
-**Port**: 6969 (dev), 3000 (docker)
+**Port**: 9346 (dev), 9347 (docker)
