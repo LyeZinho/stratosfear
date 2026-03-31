@@ -163,13 +163,14 @@ export function calculateDetectionProbability(
  * 
  * @param distanceKm - Distance to travel in kilometers
  * @param fuelBurnRate - Fuel consumption rate in liters per hour
+ * @param speedKmh - Speed in kilometers per hour (default: 900)
  * @returns Fuel needed in liters
  */
 export function calculateFuelNeeded(
   distanceKm: number,
-  fuelBurnRate: number
+  fuelBurnRate: number,
+  speedKmh: number = 900
 ): number {
-  const speedKmh = 900;
   const timeHours = distanceKm / speedKmh;
   const fuelNeeded = fuelBurnRate * timeHours;
   

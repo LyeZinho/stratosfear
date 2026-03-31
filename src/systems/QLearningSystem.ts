@@ -135,7 +135,7 @@ export class QTable {
     return false;
   }
 
-  getEvastionDistance(): number {
+  getEvasionDistance(): number {
     const base = 50;
     const personalityMod = (this.personality.evasionCaution - 50) / 100;
     return base + personalityMod * 30;
