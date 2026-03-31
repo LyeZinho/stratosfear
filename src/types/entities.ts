@@ -210,3 +210,92 @@ export interface GameState {
   activeObjectives: PassiveObjective[];
   crashHistory: any[];
 }
+
+// ── Radar Modes ────────────────────────────────────────────────
+export enum RadarMode {
+  RWS = 'RWS', // Range While Search
+  TWS = 'TWS', // Track While Scan
+  STT = 'STT'  // Single Target Track (Lock)
+}
+
+// ── IFF & RWR Status ───────────────────────────────────────────
+export enum IFFStatus {
+  UNKNOWN = 'UNKNOWN',      // Just detected, type unknown
+  IDENTIFYING = 'IDENTIFYING', // Analyzing signature
+  IDENTIFIED = 'IDENTIFIED',   // Type known, intent unknown
+  HOSTILE = 'HOSTILE',         // Confirmed enemy
+  FRIENDLY = 'FRIENDLY',      // Confirmed ally
+  NEUTRAL = 'NEUTRAL'         // Confirmed neutral
+}
+
+export enum RWRStatus {
+  SILENT = 'SILENT',       // Not being tracked
+  SEARCH = 'SEARCH',       // Being detected by radar
+  TRACK = 'TRACK',         // Being tracked (lock)
+  MISSILE = 'MISSILE'      // Missile inbound
+}
+
+// ── Ground Units ───────────────────────────────────────────────
+export enum GroundUnitType {
+  SAM_BATTERY = 'SAM_BATTERY',
+  RADAR_STATION = 'RADAR_STATION',
+  TANK = 'TANK',
+  ARTILLERY = 'ARTILLERY',
+  APC = 'APC',
+  INFANTRY = 'INFANTRY',
+  RECON = 'RECON',
+  AAA = 'AAA'
+}
+
+export interface GroundUnit {
+  id: string;
+  model: string;
+  type: GroundUnitType;
+  side: Side;
+  position: Coordinates;
+  targetPosition?: Coordinates; // For movement/guard
+  radarRangeKm: number;
+  missiles: Record<string, number>;
+  health: number;
+  status: 'IDLE' | 'MOVING' | 'GUARD' | 'DESTROYED';
+  lastLaunchTime?: number;
+}
+
+// ── Formation / Groups ─────────────────────────────────────────
+export enum FormationType {
+  VIC = 'VIC',
+  LINE = 'LINE',
+  ECHELON = 'ECHELON'
+}
+
+export interface PlaneGroup {
+  id: string;
+  leaderId: string;
+  memberIds: string[];
+  type: FormationType;
+  name: string;
+  mission?: Mission;
+}
+
+// ── Q-Learning Brain ──────────────────────────────────────────
+export interface QBrainData {
+  experience: number;
+  generation: number;
+  level: number;
+}
+
+// ── Buildings & Resources ─────────────────────────────────────
+export interface PendingBuilding {
+  id: string;
+  type: BuildingType;
+  position: Coordinates;
+  assignedAircraftId: string | null;
+  status: 'PENDING' | 'IN_TRANSIT' | 'CONSTRUCTING' | 'COMPLETED';
+}
+
+export interface ResourceSpot {
+  fuelCapacity: number;
+  fuelAvailable: number;
+  creditsStorage: number;
+  lastRestockTime: number;
+}
