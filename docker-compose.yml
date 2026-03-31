@@ -14,6 +14,9 @@ services:
     networks:
       - coolify
     restart: unless-stopped
+    labels:
+      - "traefik.docker.network=coolify"
+      - "traefik.http.services.stratosfear.loadbalancer.server.port=6959"
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:6959"]
       interval: 30s
