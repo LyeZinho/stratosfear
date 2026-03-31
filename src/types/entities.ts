@@ -122,6 +122,7 @@ export interface Aircraft {
   lastDetected?: Tick;
   mission?: Mission;
   patrolTarget?: Coordinates;
+  qBrain?: QBrainData;
 }
 
 export interface Mission {
@@ -192,7 +193,7 @@ export interface GameState {
   hostileBases: Base[];
   allyBases: Base[];
   neutralBases: Base[];
-  groundUnits: any[];
+  groundUnits: GroundUnit[];
   selectedAircraftId: string | null;
   tick: Tick;
   isPaused: boolean;
@@ -201,7 +202,7 @@ export interface GameState {
   trailDensity: number;
   groups: any[];
   pendingTargetId: string | null;
-  pendingBuildings: any[];
+  pendingBuildings: PendingBuilding[];
   buildMode: boolean;
   outerBaseExpansionMode: boolean;
   selectedBuildingType: string | null;
@@ -212,7 +213,7 @@ export interface GameState {
 }
 
 // ── Radar Modes ────────────────────────────────────────────────
-export enum RadarMode {
+export enum AircraftRadarMode {
   RWS = 'RWS', // Range While Search
   TWS = 'TWS', // Track While Scan
   STT = 'STT'  // Single Target Track (Lock)
@@ -220,12 +221,23 @@ export enum RadarMode {
 
 // ── IFF & RWR Status ───────────────────────────────────────────
 export enum IFFStatus {
-  UNKNOWN = 'UNKNOWN',      // Just detected, type unknown
-  IDENTIFYING = 'IDENTIFYING', // Analyzing signature
-  IDENTIFIED = 'IDENTIFIED',   // Type known, intent unknown
-  HOSTILE = 'HOSTILE',         // Confirmed enemy
-  FRIENDLY = 'FRIENDLY',      // Confirmed ally
-  NEUTRAL = 'NEUTRAL'         // Confirmed neutral
+  UNKNOWN = 'UNKNOWN',               // Just detected, type unknown
+  BOGEY = 'BOGEY',                   // Unidentified contact
+  BANDIT = 'BANDIT',                 // Hostile confirmed
+  CONFIRMED_TARGET = 'CONFIRMED_TARGET', // Hostile with high confidence
+  FRIENDLY = 'FRIENDLY',             // Confirmed friendly
+  ALLIED = 'ALLIED',                 // Confirmed ally
+  NEUTRAL = 'NEUTRAL'                // Confirmed neutral
+}
+
+export interface IFFData {
+  aircraftId: string;
+  status: IFFStatus;
+  confidence: number;
+  detectionTime: Tick;
+  lastConfirmedTime: Tick;
+  transponderActive: boolean;
+  radarSignatureMatch: number;
 }
 
 export enum RWRStatus {
