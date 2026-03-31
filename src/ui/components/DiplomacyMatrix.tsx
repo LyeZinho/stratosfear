@@ -30,9 +30,8 @@ export const DiplomacyMatrix: React.FC<DiplomacyMatrixProps> = ({ relationships,
   const uniqueRelationships = relationships ? relationships.filter((rel, idx, arr) =>
     arr.findIndex(
       (r) =>
-        r.factionAId === rel.factionBId &&
-        r.factionBId === rel.factionAId &&
-        r.factionAId > r.factionBId
+        (r.factionAId === rel.factionAId && r.factionBId === rel.factionBId) ||
+        (r.factionAId === rel.factionBId && r.factionBId === rel.factionAId)
     ) === idx
   ) : [];
 

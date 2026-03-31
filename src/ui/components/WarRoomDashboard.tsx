@@ -127,9 +127,9 @@ export const WarRoomDashboard: React.FC = () => {
                   <h3 className="font-bold text-[9px] tracking-[0.2em] uppercase">FACTION_CORE</h3>
                 </div>
                 <div className="flex flex-col gap-2">
-                   {Array.from(factions.keys()).map((id) => (
+                   {Array.from(factions.keys()).map((id, idx) => (
                       <button
-                        key={id}
+                        key={id || `faction-${idx}`}
                         onClick={() => setSelectedFaction(id)}
                         className={`w-full text-left px-4 py-2 text-[9px] font-bold tracking-widest border transition-all rounded ${
                           selectedFactionId === id

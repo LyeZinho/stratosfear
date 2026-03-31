@@ -121,9 +121,9 @@ export const TacticalMap: React.FC = () => {
         )}
 
         {/* Allied Bases */}
-        {allyMapBases.map(base => (
+        {allyMapBases.map((base, idx) => (
           <Marker 
-            key={base.id}
+            key={base.id || `ally-base-${idx}`}
             position={[base.position.lat, base.position.lng]} 
             icon={getBaseIcon(Side.ALLY, selectedAircraftId === base.id)}
             eventHandlers={{ click: () => selectAircraft(base.id) }}
@@ -131,8 +131,8 @@ export const TacticalMap: React.FC = () => {
         ))}
 
         {/* Hostile Bases */}
-        {hostileMapBases.map(base => (
-          <React.Fragment key={base.id}>
+        {hostileMapBases.map((base, idx) => (
+          <React.Fragment key={base.id || `hostile-base-${idx}`}>
             <Circle
               center={[base.position.lat, base.position.lng]}
               radius={(base.radarRange || 100) * 1000}
@@ -147,9 +147,9 @@ export const TacticalMap: React.FC = () => {
         ))}
 
         {/* Neutral Bases */}
-        {neutralMapBases.map(base => (
+        {neutralMapBases.map((base, idx) => (
           <Marker 
-            key={base.id}
+            key={base.id || `neutral-base-${idx}`}
             position={[base.position.lat, base.position.lng]} 
             icon={getBaseIcon(Side.NEUTRAL, selectedAircraftId === base.id)}
             eventHandlers={{ click: () => selectAircraft(base.id) }}
@@ -157,9 +157,9 @@ export const TacticalMap: React.FC = () => {
         ))}
 
         {/* Aircraft */}
-        {aircraftList.map(ac => (
+        {aircraftList.map((ac, idx) => (
           <Marker
-            key={ac.id}
+            key={ac.id || `aircraft-${idx}`}
             position={[ac.position.lat, ac.position.lng]}
             icon={getAircraftIcon(ac.side || Side.NEUTRAL, ac.heading || 0, selectedAircraftId === ac.id)}
             eventHandlers={{ click: () => selectAircraft(ac.id) }}
@@ -167,9 +167,9 @@ export const TacticalMap: React.FC = () => {
         ))}
 
         {/* Missiles */}
-        {missileList.map(m => (
+        {missileList.map((m, idx) => (
           <Circle
-            key={m.id}
+            key={m.id || `missile-${idx}`}
             center={[m.position.lat, m.position.lng]}
             radius={200}
             pathOptions={{ color: "#fbbf24", fillColor: "#fbbf24", fillOpacity: 1 }}

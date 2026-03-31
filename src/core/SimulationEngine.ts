@@ -1,4 +1,4 @@
-import { simulationClock } from "../core/SimulationClock";
+import { simulationClock, SimulationClock } from "../core/SimulationClock";
 import { eventBus } from "../core/EventBus";
 import { aircraftRegistry } from "../plugins/AircraftRegistry";
 import { missileRegistry } from "../plugins/MissileRegistry";
@@ -107,9 +107,9 @@ export class SimulationEngine {
 
     // Add Initial Intel stream items
     const initialNews: NewsArticle[] = [
-      { id: '1', headline: 'COMMAND CENTER ONLINE: GLOBAL MONITOR ACTIVE', timestamp: Date.now(), category: 'INFO', importance: 5, bias: 'NEUTRAL' },
-      { id: '2', headline: 'BLUE ALLIANCE MOBILIZING IN SOUTH QUADRANT', timestamp: Date.now() - 5000, category: 'MILITARY', importance: 7, bias: 'NEUTRAL' },
-      { id: '3', headline: 'ENERGY MARKETS FLUCTUATE AMID TENSION', timestamp: Date.now() - 15000, category: 'ECONOMY', importance: 3, bias: 'PATRIOTIC' },
+      { id: '1', factionId: 'PLAYER', headline: 'COMMAND CENTER ONLINE: GLOBAL MONITOR ACTIVE', body: '', sourceEvent: 'init', timestamp: Date.now(), category: 'MILITARY', importance: 5, bias: 'NEUTRAL' },
+      { id: '2', factionId: 'BLUE_ALLIANCE', headline: 'BLUE ALLIANCE MOBILIZING IN SOUTH QUADRANT', body: '', sourceEvent: 'init', timestamp: Date.now() - 5000, category: 'MILITARY', importance: 7, bias: 'NEUTRAL' },
+      { id: '3', factionId: 'PLAYER', headline: 'ENERGY MARKETS FLUCTUATE AMID TENSION', body: '', sourceEvent: 'init', timestamp: Date.now() - 15000, category: 'ECONOMIC', importance: 3, bias: 'PATRIOTIC' },
     ];
     warRoomStore.addNewsArticle(initialNews[0]);
     warRoomStore.addNewsArticle(initialNews[1]);
@@ -117,8 +117,8 @@ export class SimulationEngine {
 
     // Add Initial Objectives for Player
     const playerObjectives: PassiveObjective[] = [
-      { id: 'OBJ_1', factionId: 'PLAYER', title: 'AIR SUPERIORITY', description: 'Maintain clear skies over Odesa.', status: 'ACTIVE', progress: 15, importance: 8, rewardCredits: 5000, revenuePerTick: 10, assignedAircraft: [], type: 'STRATEGIC' },
-      { id: 'OBJ_2', factionId: 'PLAYER', title: 'RADAR EXPANSION', description: 'Extend coverage into Neutral zones.', status: 'ACTIVE', progress: 45, importance: 4, rewardCredits: 2000, revenuePerTick: 5, assignedAircraft: [], type: 'INFRASTRUCTURE' },
+      { id: 'OBJ_1', factionId: 'PLAYER', status: 'ACTIVE', progress: 15, revenuePerTick: 10, assignedAircraft: [], type: 'CAP_PATROL', location: { x: 512, y: 512, radius: 150 }, infrastructureMultiplier: 1.0, startTime: Date.now(), estimatedCompletion: Date.now() + 30000 },
+      { id: 'OBJ_2', factionId: 'PLAYER', status: 'ACTIVE', progress: 45, revenuePerTick: 5, assignedAircraft: [], type: 'SOVEREIGNTY_ZONE', location: { x: 512, y: 512, radius: 200 }, infrastructureMultiplier: 1.0, startTime: Date.now(), estimatedCompletion: Date.now() + 60000 },
     ];
     playerObjectives.forEach(obj => warRoomStore.addObjective(obj));
 
@@ -128,7 +128,7 @@ export class SimulationEngine {
 
   tick(): void {
     const currentTick = simulationClock.advanceTick();
-    const deltaTimeMs = currentTick.deltaMs;
+    const deltaTimeMs = SimulationClock.getDeltaTime() * 1000;
 
     // Movement: Update Aircraft positions
     this.aircraft.forEach((ac) => {
@@ -160,13 +160,14 @@ export class SimulationEngine {
   private updateWarRoomStore(): void {
     const warRoomStore = useWarRoomStore.getState();
     const currentTick = simulationClock.getCurrentTick();
-    warRoomStore.setGameTime(currentTick.count * 100);
+    warRoomStore.setGameTime(currentTick * 100);
     
     // In a real simulation, we would periodically add new articles or update objectives here
   }
 
   private updateStore(): void {
     const allBases = Array.from(this.bases.values());
+    const tick = simulationClock.getCurrentTick();
     const gameState: GameState = {
       aircraft: this.aircraft,
       missileMap: this.missiles,
@@ -176,9 +177,9 @@ export class SimulationEngine {
       hostileBases: allBases.filter(b => b.side === Side.HOSTILE),
       allyBases: allBases.filter(b => b.side === Side.ALLY),
       neutralBases: allBases.filter(b => b.side === Side.NEUTRAL),
-      tick: simulationClock.getCurrentTick().count,
+      tick: tick,
       isPaused: false,
-      elapsedSeconds: simulationClock.getCurrentTick().count / 60,
+      elapsedSeconds: tick / 60,
       groundUnits: [],
       selectedAircraftId: useSimulationState.getState().gameState.selectedAircraftId,
       logs: [],
