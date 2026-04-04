@@ -14,6 +14,9 @@ pub const MAX_TRAIL: usize = 60;
 /// Off-screen culling margin in pixels (accounts for tag width/height).
 const CULLING_MARGIN: i32 = 50;
 
+/// Ghost fade duration in frames (3 seconds at 60fps).
+const GHOST_FADE_FRAMES: u32 = 180;
+
 /// A recorded position snapshot for trail rendering.
 #[derive(Debug, Clone, Copy)]
 pub struct TrailPoint {
@@ -52,19 +55,21 @@ impl AircraftRenderState {
             self.last_known_lat = ac.lat;
             self.last_known_lon = ac.lon;
             self.frames_since_detection_lost = 0;
-        } else if self.frames_since_detection_lost < 180 {
+        } else if self.frames_since_detection_lost < GHOST_FADE_FRAMES {
             self.frames_since_detection_lost += 1;
         }
 
         self.trail_timer += dt;
-        if self.trail_timer >= interval {
-            self.trail_timer = 0.0;
-            self.trail.push(TrailPoint {
-                lat: ac.lat,
-                lon: ac.lon,
-            });
-            if self.trail.len() > MAX_TRAIL {
-                self.trail.remove(0);
+        if ac.is_detected {
+            if self.trail_timer >= interval {
+                self.trail_timer = 0.0;
+                self.trail.push(TrailPoint {
+                    lat: ac.lat,
+                    lon: ac.lon,
+                });
+                if self.trail.len() > MAX_TRAIL {
+                    self.trail.remove(0);
+                }
             }
         }
     }
@@ -133,7 +138,7 @@ pub fn draw_radar_sweep(
     let (wx, wy) = geo::lat_lon_to_world(radar_lat, radar_lon, camera.zoom);
     let (rx, ry) = camera.world_to_screen(wx, wy);
 
-    let km_per_px = 156.543 / (1u32 << camera.zoom) as f32;
+    let km_per_px = 156.543 / (1u32 << camera.zoom) as f32 * (radar_lat as f32).to_radians().cos();
     let radius_px = radar_range_km / km_per_px;
 
     let arc_start = sweep_angle_deg - 15.0;
@@ -160,14 +165,18 @@ pub fn draw_aircraft<'tc>(
 ) {
     let (win_w, win_h) = canvas.window().size();
 
-    for (ac, state) in aircraft.iter().zip(render_states.iter()) {
-        if ac.is_detected {
-            continue;
-        }
+    for state in render_states.iter() {
         if state.frames_since_detection_lost == 0 {
             continue;
         }
-        if state.frames_since_detection_lost >= 180 {
+        if state.frames_since_detection_lost >= GHOST_FADE_FRAMES {
+            continue;
+        }
+
+        let Some(ac) = aircraft.iter().find(|a| a.id == state.id) else {
+            continue;
+        };
+        if ac.is_detected {
             continue;
         }
 
@@ -185,7 +194,7 @@ pub fn draw_aircraft<'tc>(
             continue;
         }
 
-        let fade = 1.0 - (state.frames_since_detection_lost as f32 / 180.0);
+        let fade = 1.0 - (state.frames_since_detection_lost as f32 / GHOST_FADE_FRAMES as f32);
         let alpha = (fade * 120.0) as u8;
         let base_color = side_color(ac.side);
         let ghost_color = Color::RGBA(base_color.r, base_color.g, base_color.b, alpha);
@@ -253,9 +262,9 @@ mod tests {
 
     #[test]
     fn test_trail_grows_on_tick() {
-        let ac = make_aircraft(1, Side::Friendly);
+        let mut ac = make_aircraft(1, Side::Friendly);
+        ac.is_detected = true;
         let mut state = AircraftRenderState::new(1);
-        // Each tick advances timer by 1.0s; interval is 2.0s
         state.tick(&ac, 1.0, 2.0);
         assert_eq!(state.trail.len(), 0, "not enough time elapsed");
         state.tick(&ac, 1.0, 2.0);
@@ -264,10 +273,11 @@ mod tests {
 
     #[test]
     fn test_trail_capped_at_max() {
-        let ac = make_aircraft(2, Side::Hostile);
+        let mut ac = make_aircraft(2, Side::Hostile);
+        ac.is_detected = true;
         let mut state = AircraftRenderState::new(2);
         for _ in 0..(MAX_TRAIL + 10) {
-            state.tick(&ac, 2.0, 1.0); // tick 2s, sample every 1s → records each tick
+            state.tick(&ac, 2.0, 1.0);
         }
         assert!(
             state.trail.len() <= MAX_TRAIL,
@@ -332,6 +342,6 @@ mod tests {
         for _ in 0..200 {
             state.tick(&ac, 0.016, 2.0);
         }
-        assert_eq!(state.frames_since_detection_lost, 180);
+        assert_eq!(state.frames_since_detection_lost, GHOST_FADE_FRAMES);
     }
 }
