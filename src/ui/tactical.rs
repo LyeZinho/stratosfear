@@ -11,6 +11,9 @@ use crate::ui::camera::Camera;
 /// Maximum trail points stored per aircraft.
 pub const MAX_TRAIL: usize = 60;
 
+/// Off-screen culling margin in pixels (accounts for tag width/height).
+const CULLING_MARGIN: i32 = 50;
+
 /// A recorded position snapshot for trail rendering.
 #[derive(Debug, Clone, Copy)]
 pub struct TrailPoint {
@@ -94,6 +97,7 @@ fn draw_tag<'tc>(
     color: Color,
 ) {
     let text = format!("{} {:05.0}ft", ac.callsign, ac.altitude_ft);
+    // TODO: cache tag textures to avoid per-frame allocation
     if let Ok(surface) = font.render(&text).blended(color) {
         if let Ok(texture) = texture_creator.create_texture_from_surface(&surface) {
             let sdl2::render::TextureQuery { width, height, .. } = texture.query();
@@ -122,7 +126,11 @@ pub fn draw_aircraft<'tc>(
         let sy = sy as i32;
 
         // Off-screen culling (with margin for tags)
-        if sx < -50 || sy < -50 || sx > win_w as i32 + 50 || sy > win_h as i32 + 50 {
+        if sx < -CULLING_MARGIN
+            || sy < -CULLING_MARGIN
+            || sx > win_w as i32 + CULLING_MARGIN
+            || sy > win_h as i32 + CULLING_MARGIN
+        {
             continue;
         }
 
