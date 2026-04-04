@@ -1,0 +1,12 @@
+[package]
+name    = "stratosphere"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "stratosphere"
+path = "src/main.rs"
+
+[dependencies]
+airstrike-engine = { path = "../airstrike-engine" }
+sdl2             = { workspace = true }
