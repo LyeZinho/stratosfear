@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns="http://www.w3.org/2000/svg" height="500" width="500" version="1.1" xmlns:cc="http://creativecommons.org/ns#" xmlns:dc="http://purl.org/dc/elements/1.1/">
+	<title>FLUG</title>
+	<path fill="#aaa" d="m61 225a51 25 0 1 0 0 50h121l150 215h30l-60-215h120l50 75h20l-20-90v-20l20-90h-20l-50 75h-120l60-215h-30l-150 215z"/>
+</svg>
