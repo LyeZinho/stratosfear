@@ -53,6 +53,13 @@ enum Scene {
     InGame,
 }
 
+#[derive(PartialEq)]
+enum Selection {
+    None,
+    Aircraft(u32),
+    Airport(String),
+}
+
 fn main() -> Result<(), String> {
     let sdl_context = sdl2::init()?;
     let video = sdl_context.video()?;
@@ -95,6 +102,8 @@ fn main() -> Result<(), String> {
     let mut mouse_down = false;
     let mut last_mouse: (i32, i32) = (0, 0);
     let mut current_mouse: (i32, i32) = (0, 0);
+    let mut selection = Selection::None;
+    let mut drag_start: (i32, i32) = (0, 0);
 
     let mut fps_timer = Instant::now();
     let mut frame_count = 0u32;
