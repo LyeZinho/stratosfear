@@ -23,16 +23,16 @@ const DEFAULT_LAT: f64 = 38.716;
 const DEFAULT_LON: f64 = -9.142;
 const DEFAULT_ZOOM: u32 = 7;
 
-struct HudCache {
+struct HudCache<'tc> {
     last_lines: [String; 3],
-    textures: Option<Vec<sdl2::render::Texture<'static>>>,
+    textures: Option<Vec<sdl2::render::Texture<'tc>>>,
     sizes: [(u32, u32); 3],
 }
 
-impl HudCache {
+impl<'tc> HudCache<'tc> {
     fn new() -> Self {
         HudCache {
-            last_lines: Default::default(),
+            last_lines: [String::new(), String::new(), String::new()],
             textures: None,
             sizes: [(0, 0); 3],
         }
@@ -194,15 +194,15 @@ fn main() -> Result<(), String> {
     Ok(())
 }
 
-fn render_hud(
+fn render_hud<'tc>(
     canvas: &mut sdl2::render::Canvas<sdl2::video::Window>,
-    texture_creator: &'static sdl2::render::TextureCreator<sdl2::video::WindowContext>,
+    texture_creator: &'tc sdl2::render::TextureCreator<sdl2::video::WindowContext>,
     font: &sdl2::ttf::Font,
     camera: &Camera,
     fps: u32,
     loaded: usize,
     pending: usize,
-    cache: &mut HudCache,
+    cache: &mut HudCache<'tc>,
 ) -> Result<(), String> {
     let (lat, lon) = camera.center_lat_lon();
     let new_lines = [
@@ -224,12 +224,12 @@ fn render_hud(
                 .map_err(|e| e.to_string())?;
             let sdl2::render::TextureQuery { width, height, .. } = texture.query();
             sizes[i] = (width, height);
-            let texture: sdl2::render::Texture<'static> = unsafe { std::mem::transmute(texture) };
             textures.push(texture);
         }
+        cache.textures = None;
+        cache.textures = Some(textures);
         cache.last_lines = new_lines;
         cache.sizes = sizes;
-        cache.textures = Some(textures);
     }
 
     let line_h = 18i32;
