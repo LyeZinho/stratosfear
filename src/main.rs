@@ -23,6 +23,22 @@ const DEFAULT_LAT: f64 = 38.716;
 const DEFAULT_LON: f64 = -9.142;
 const DEFAULT_ZOOM: u32 = 7;
 
+struct HudCache {
+    last_lines: [String; 3],
+    textures: Option<Vec<sdl2::render::Texture<'static>>>,
+    sizes: [(u32, u32); 3],
+}
+
+impl HudCache {
+    fn new() -> Self {
+        HudCache {
+            last_lines: Default::default(),
+            textures: None,
+            sizes: [(0, 0); 3],
+        }
+    }
+}
+
 fn main() -> Result<(), String> {
     // --- SDL2 init ---
     let sdl_context = sdl2::init()?;
@@ -72,6 +88,8 @@ fn main() -> Result<(), String> {
     let mut fps_timer = Instant::now();
     let mut frame_count = 0u32;
     let mut fps_display = 0u32;
+
+    let mut hud_cache = HudCache::new();
 
     'running: loop {
         let frame_start = Instant::now();
@@ -161,6 +179,7 @@ fn main() -> Result<(), String> {
             fps_display,
             tile_manager.loaded,
             tile_manager.pending,
+            &mut hud_cache,
         )?;
 
         canvas.present();
@@ -183,38 +202,49 @@ fn render_hud(
     fps: u32,
     loaded: usize,
     pending: usize,
+    cache: &mut HudCache,
 ) -> Result<(), String> {
     let (lat, lon) = camera.center_lat_lon();
-    let lines = [
+    let new_lines = [
         format!("ZOOM: {:2}   FPS: {}", camera.zoom, fps),
         format!("LAT: {:+.4}°  LON: {:+.4}°", lat, lon),
         format!("TILES: {} loaded / {} pending", loaded, pending),
     ];
 
+    if cache.textures.is_none() || new_lines != cache.last_lines {
+        let mut textures = Vec::with_capacity(3);
+        let mut sizes = [(0u32, 0u32); 3];
+        for (i, line) in new_lines.iter().enumerate() {
+            let surface = font
+                .render(line)
+                .blended(Color::RGB(0, 255, 100))
+                .map_err(|e| e.to_string())?;
+            let texture = texture_creator
+                .create_texture_from_surface(&surface)
+                .map_err(|e| e.to_string())?;
+            let sdl2::render::TextureQuery { width, height, .. } = texture.query();
+            sizes[i] = (width, height);
+            let texture: sdl2::render::Texture<'static> = unsafe { std::mem::transmute(texture) };
+            textures.push(texture);
+        }
+        cache.last_lines = new_lines;
+        cache.sizes = sizes;
+        cache.textures = Some(textures);
+    }
+
     let line_h = 18i32;
     let padding = 8i32;
 
-    // Background rect
     canvas.set_draw_color(Color::RGBA(0, 0, 0, 180));
-    let bg = Rect::new(
-        8,
-        8,
-        280,
-        (lines.len() as i32 * line_h + padding * 2) as u32,
-    );
+    let bg = Rect::new(8, 8, 280, (3 * line_h + padding * 2) as u32);
     canvas.fill_rect(bg)?;
 
-    for (i, line) in lines.iter().enumerate() {
-        let surface = font
-            .render(line)
-            .blended(Color::RGB(0, 255, 100))
-            .map_err(|e| e.to_string())?;
-        let texture = texture_creator
-            .create_texture_from_surface(&surface)
-            .map_err(|e| e.to_string())?;
-        let sdl2::render::TextureQuery { width, height, .. } = texture.query();
-        let dst = Rect::new(padding + 8, padding + 8 + i as i32 * line_h, width, height);
-        canvas.copy(&texture, None, Some(dst))?;
+    if let Some(textures) = &cache.textures {
+        for (i, texture) in textures.iter().enumerate() {
+            let (w, h) = cache.sizes[i];
+            let dst = Rect::new(padding + 8, padding + 8 + i as i32 * line_h, w, h);
+            canvas.copy(texture, None, Some(dst))?;
+        }
     }
 
     Ok(())
