@@ -10,14 +10,17 @@ use sdl2::mouse::MouseButton;
 use sdl2::pixels::Color;
 use sdl2::rect::Rect;
 
+use simulation::world::World;
 use ui::camera::Camera;
 use ui::grid::draw_grid;
+use ui::tactical::{draw_aircraft, AircraftRenderState};
 use ui::tile_manager::{visible_tiles, TileManager};
 
 const WINDOW_W: u32 = 1280;
 const WINDOW_H: u32 = 720;
 const TARGET_FPS: u64 = 60;
 const FRAME_DURATION: Duration = Duration::from_millis(1000 / TARGET_FPS);
+const TRAIL_INTERVAL_S: f32 = 2.0;
 
 // Default start: Lisbon, Portugal
 const DEFAULT_LAT: f64 = 38.716;
@@ -92,6 +95,14 @@ fn main() -> Result<(), String> {
 
     let mut hud_cache = HudCache::new();
 
+    let mut world = World::new();
+    world.spawn_demo();
+    let mut render_states: Vec<AircraftRenderState> = world
+        .aircraft
+        .iter()
+        .map(|ac| AircraftRenderState::new(ac.id))
+        .collect();
+
     'running: loop {
         let frame_start = Instant::now();
 
@@ -152,6 +163,15 @@ fn main() -> Result<(), String> {
         tile_manager.request_tiles(&tiles);
         tile_manager.drain_channel(texture_creator);
 
+        // Physics + trail sampling
+        let dt = FRAME_DURATION.as_secs_f32().min(0.1);
+        world.update(dt);
+        for state in &mut render_states {
+            if let Some(ac) = world.aircraft.iter().find(|a| a.id == state.id) {
+                state.tick(ac, dt, TRAIL_INTERVAL_S);
+            }
+        }
+
         // FPS counter
         frame_count += 1;
         if fps_timer.elapsed() >= Duration::from_secs(1) {
@@ -170,6 +190,16 @@ fn main() -> Result<(), String> {
 
         // b) Coordinate grid
         draw_grid(&mut canvas, &camera);
+
+        // Tactical overlay: aircraft symbols, tags, trails
+        draw_aircraft(
+            &mut canvas,
+            texture_creator,
+            &font,
+            &world.aircraft,
+            &render_states,
+            &camera,
+        );
 
         // c) Debug HUD
         render_hud(
