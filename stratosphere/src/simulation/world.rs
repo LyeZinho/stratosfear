@@ -1,10 +1,12 @@
-/// World: owns all aircraft entities and drives physics updates.
-use airstrike_engine::core::aircraft::{Aircraft, Side};
+use airstrike_engine::core::aircraft::{Aircraft, FlightPhase, Side};
+use airstrike_engine::core::airport::{AirportDb, AirportType};
 use airstrike_engine::core::radar::RadarSystem;
 
 pub struct World {
     pub aircraft: Vec<Aircraft>,
     pub radar: RadarSystem,
+    pub credits: u32,
+    pub game_time_s: f32,
     next_id: u32,
 }
 
@@ -13,13 +15,48 @@ impl World {
         World {
             aircraft: Vec::new(),
             radar: RadarSystem::new(38.716, -9.142, 50.0, 400.0),
+            credits: 0,
+            game_time_s: 0.0,
             next_id: 1,
         }
     }
 
-    /// Spawn a demo scenario: 2 friendly + 2 hostile aircraft near Lisbon.
+    pub fn new_from_settings(country_iso: &str, starting_credits: u32, db: &AirportDb) -> Self {
+        let airports: Vec<_> = db.for_country(country_iso).into_iter().cloned().collect();
+        let mut world = World {
+            aircraft: Vec::new(),
+            radar: RadarSystem::new(38.716, -9.142, 50.0, 400.0),
+            credits: starting_credits,
+            game_time_s: 0.0,
+            next_id: 1,
+        };
+        for airport in &airports {
+            let model = match airport.airport_type {
+                AirportType::Large => "F-16C",
+                AirportType::Medium => "Gripen",
+                AirportType::Small | AirportType::Other => continue,
+            };
+            let callsign = format!("{}-01", airport.icao);
+            let mut ac = Aircraft::new(world.next_id, &callsign, model, Side::Friendly);
+            world.next_id += 1;
+            ac.lat = airport.lat;
+            ac.lon = airport.lon;
+            ac.altitude_ft = airport.elevation_ft;
+            ac.phase = FlightPhase::ColdDark;
+            ac.home_airport_icao = airport.icao.clone();
+            ac.home_airport_lat = airport.lat;
+            ac.home_airport_lon = airport.lon;
+            if matches!(airport.airport_type, AirportType::Large)
+                && world.radar.position_lat == 38.716
+            {
+                world.radar = RadarSystem::new(airport.lat, airport.lon, 50.0, 400.0);
+            }
+            world.aircraft.push(ac);
+        }
+        world
+    }
+
     pub fn spawn_demo(&mut self) {
-        // Friendly CAP patrol north of Lisbon
         let mut f1 = Aircraft::new(self.next_id, "EAGLE1", "F-16C", Side::Friendly);
         self.next_id += 1;
         f1.lat = 39.5;
@@ -28,6 +65,7 @@ impl World {
         f1.speed_knots = 450.0;
         f1.altitude_ft = 25_000.0;
         f1.rcs_base = 1.2;
+        f1.phase = FlightPhase::EnRoute;
         self.aircraft.push(f1);
 
         let mut f2 = Aircraft::new(self.next_id, "EAGLE2", "F-16C", Side::Friendly);
@@ -38,9 +76,9 @@ impl World {
         f2.speed_knots = 450.0;
         f2.altitude_ft = 24_000.0;
         f2.rcs_base = 1.2;
+        f2.phase = FlightPhase::EnRoute;
         self.aircraft.push(f2);
 
-        // Hostile ingress from east
         let mut h1 = Aircraft::new(self.next_id, "BOGEY1", "Su-27", Side::Hostile);
         self.next_id += 1;
         h1.lat = 38.9;
@@ -49,6 +87,7 @@ impl World {
         h1.speed_knots = 520.0;
         h1.altitude_ft = 500.0;
         h1.rcs_base = 4.0;
+        h1.phase = FlightPhase::EnRoute;
         self.aircraft.push(h1);
 
         let mut h2 = Aircraft::new(self.next_id, "BOGEY2", "Su-27", Side::Hostile);
@@ -59,10 +98,10 @@ impl World {
         h2.speed_knots = 500.0;
         h2.altitude_ft = 18_000.0;
         h2.rcs_base = 3.5;
+        h2.phase = FlightPhase::EnRoute;
         self.aircraft.push(h2);
     }
 
-    /// Update all entities by `dt` seconds.
     pub fn update(&mut self, dt: f32) {
         for ac in &mut self.aircraft {
             ac.update(dt);
@@ -172,5 +211,35 @@ mod tests {
             "aircraft beyond radar range should not be detected"
         );
         assert_eq!(world.aircraft[0].detection_confidence, 0.0);
+    }
+
+    #[test]
+    fn test_world_from_portugal_has_airports() {
+        let csv = include_bytes!("../../assets/airports.csv");
+        let db = airstrike_engine::core::airport::AirportDb::load(csv);
+        let world = World::new_from_settings("PT", 100_000, &db);
+        assert!(!world.aircraft.is_empty(), "Portugal should spawn aircraft");
+    }
+
+    #[test]
+    fn test_world_aircraft_start_cold_dark() {
+        let csv = include_bytes!("../../assets/airports.csv");
+        let db = airstrike_engine::core::airport::AirportDb::load(csv);
+        let world = World::new_from_settings("PT", 100_000, &db);
+        for ac in &world.aircraft {
+            assert!(
+                matches!(ac.phase, FlightPhase::ColdDark),
+                "aircraft {} should start ColdDark",
+                ac.callsign
+            );
+        }
+    }
+
+    #[test]
+    fn test_world_credits_set_from_settings() {
+        let csv = include_bytes!("../../assets/airports.csv");
+        let db = airstrike_engine::core::airport::AirportDb::load(csv);
+        let world = World::new_from_settings("PT", 75_000, &db);
+        assert_eq!(world.credits, 75_000);
     }
 }
