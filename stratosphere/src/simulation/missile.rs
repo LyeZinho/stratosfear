@@ -104,7 +104,7 @@ pub fn resolve_hit(
         Some(s) => s,
         None => return HitResult::Miss,
     };
-    let rcs_factor = (target_rcs / 5.0_f32).powf(0.1).min(1.2).max(0.3);
+    let rcs_factor = (target_rcs / 5.0_f32).powf(0.1).clamp(0.3, 1.2);
     let maneuver_factor = if target_maneuvering { 0.7 } else { 1.0 };
     let pk = spec.pk_base * rcs_factor * chaff_factor * maneuver_factor;
     if pk >= 0.5 {

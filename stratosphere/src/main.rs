@@ -161,13 +161,12 @@ fn main() -> Result<(), String> {
                     Event::KeyDown {
                         keycode: Some(Keycode::Return),
                         ..
-                    } => match ms.confirm() {
-                        ModeSelectAction::GoToSandboxSettings => {
+                    } => {
+                        if let ModeSelectAction::GoToSandboxSettings = ms.confirm() {
                             let settings = SandboxSettings::new(&airport_db);
                             scene = Scene::SandboxSettings(settings);
                         }
-                        _ => {}
-                    },
+                    }
                     _ => {}
                 },
                 Scene::SandboxSettings(ss) => match event {
@@ -189,11 +188,12 @@ fn main() -> Result<(), String> {
                     Event::KeyDown {
                         keycode: Some(Keycode::Return),
                         ..
-                    } => match ss.confirm() {
-                        SandboxAction::StartGame {
+                    } => {
+                        if let SandboxAction::StartGame {
                             country_iso,
                             starting_credits,
-                        } => {
+                        } = ss.confirm()
+                        {
                             world = World::new_from_settings(
                                 &country_iso,
                                 starting_credits,
@@ -206,8 +206,7 @@ fn main() -> Result<(), String> {
                                 .collect();
                             scene = Scene::InGame;
                         }
-                        _ => {}
-                    },
+                    }
                     _ => {}
                 },
                 Scene::InGame => match event {
@@ -387,6 +386,7 @@ fn main() -> Result<(), String> {
     Ok(())
 }
 
+#[allow(clippy::needless_lifetimes, clippy::too_many_arguments)]
 fn render_hud<'tc>(
     canvas: &mut sdl2::render::Canvas<sdl2::video::Window>,
     texture_creator: &'tc sdl2::render::TextureCreator<sdl2::video::WindowContext>,
