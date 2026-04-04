@@ -31,6 +31,10 @@ pub struct Aircraft {
 
     // Radar cross-section (base frontal, m²)
     pub rcs_base: f32,
+
+    // Radar detection state (updated each frame by World)
+    pub is_detected: bool,
+    pub detection_confidence: f32, // 0.0 = not detected, 1.0 = strong track
 }
 
 impl Aircraft {
@@ -49,6 +53,8 @@ impl Aircraft {
             fuel_kg: 3_000.0,
             fuel_burn_kg_per_s: 1.5,
             rcs_base: 1.0,
+            is_detected: false,
+            detection_confidence: 0.0,
         }
     }
 
@@ -157,5 +163,12 @@ mod tests {
         ac.update(60.0);
         // 18518m / 111320m_per_deg ≈ 0.1664 degrees
         assert!((ac.lat - 0.1664).abs() < 0.002, "lat={}", ac.lat);
+    }
+
+    #[test]
+    fn test_new_aircraft_starts_not_detected() {
+        let ac = Aircraft::new(1, "TEST", "F-16C", Side::Friendly);
+        assert!(!ac.is_detected);
+        assert_eq!(ac.detection_confidence, 0.0);
     }
 }

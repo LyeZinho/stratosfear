@@ -171,6 +171,8 @@ mod tests {
             fuel_kg: 3000.0,
             fuel_burn_kg_per_s: 1.5,
             rcs_base: 1.0,
+            is_detected: false,
+            detection_confidence: 0.0,
         }
     }
 
