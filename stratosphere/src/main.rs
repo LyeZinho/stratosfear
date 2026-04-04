@@ -149,6 +149,21 @@ fn main() -> Result<(), String> {
                         MenuAction::Quit => break 'running,
                         _ => {}
                     },
+                    Event::MouseMotion { x, y, .. } => {
+                        menu.handle_mouse_move(x, y, WINDOW_W as i32);
+                    }
+                    Event::MouseButtonDown {
+                        mouse_btn: MouseButton::Left,
+                        x,
+                        y,
+                        ..
+                    } => match menu.handle_mouse_click(x, y, WINDOW_W as i32) {
+                        Some(MenuAction::GoToModeSelect) => {
+                            scene = Scene::ModeSelect(ModeSelect::new());
+                        }
+                        Some(MenuAction::Quit) => break 'running,
+                        _ => {}
+                    },
                     _ => {}
                 },
                 Scene::ModeSelect(ms) => match event {
@@ -172,6 +187,22 @@ fn main() -> Result<(), String> {
                         ..
                     } => {
                         if let ModeSelectAction::GoToSandboxSettings = ms.confirm() {
+                            let settings = SandboxSettings::new(&airport_db);
+                            scene = Scene::SandboxSettings(settings);
+                        }
+                    }
+                    Event::MouseMotion { x, y, .. } => {
+                        ms.handle_mouse_move(x, y, WINDOW_W as i32);
+                    }
+                    Event::MouseButtonDown {
+                        mouse_btn: MouseButton::Left,
+                        x,
+                        y,
+                        ..
+                    } => {
+                        if let Some(ModeSelectAction::GoToSandboxSettings) =
+                            ms.handle_mouse_click(x, y, WINDOW_W as i32)
+                        {
                             let settings = SandboxSettings::new(&airport_db);
                             scene = Scene::SandboxSettings(settings);
                         }
@@ -215,6 +246,17 @@ fn main() -> Result<(), String> {
                                 .collect();
                             scene = Scene::InGame;
                         }
+                    }
+                    Event::MouseMotion { x, y, .. } => {
+                        ss.handle_mouse_move(x, y, WINDOW_W as i32);
+                    }
+                    Event::MouseButtonDown {
+                        mouse_btn: MouseButton::Left,
+                        x,
+                        y,
+                        ..
+                    } => {
+                        ss.handle_mouse_click(x, y, WINDOW_W as i32);
                     }
                     _ => {}
                 },
@@ -494,7 +536,7 @@ fn render_main_menu(
         w,
     )?;
     for (i, item) in menu.items().iter().enumerate() {
-        let color = if menu.selected == i {
+        let color = if menu.selected == i || menu.hovered_index == Some(i) {
             Color::RGB(0, 255, 100)
         } else {
             Color::RGB(0, 100, 50)
@@ -521,7 +563,7 @@ fn render_mode_select(
         w,
     )?;
     for (i, item) in ms.items().iter().enumerate() {
-        let color = if ms.selected == i {
+        let color = if ms.selected == i || ms.hovered_index == Some(i) {
             Color::RGB(0, 255, 100)
         } else {
             Color::RGB(0, 100, 50)
@@ -552,7 +594,7 @@ fn render_sandbox_settings(
     let end = (start + visible).min(ss.country_list.len());
     for (list_i, (iso, _)) in ss.country_list[start..end].iter().enumerate() {
         let actual_i = start + list_i;
-        let color = if ss.selected_country == actual_i {
+        let color = if ss.selected_country == actual_i || ss.hovered_index == Some(list_i) {
             Color::RGB(0, 255, 100)
         } else {
             Color::RGB(0, 100, 50)
