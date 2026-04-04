@@ -247,6 +247,19 @@ fn main() -> Result<(), String> {
                         let my = current_mouse.1 as f32;
                         camera.zoom_at(if y > 0 { 1 } else { -1 }, mx, my);
                     }
+                    Event::KeyDown {
+                        keycode: Some(Keycode::D),
+                        ..
+                    } => {
+                        if let Some(ac) = world
+                            .aircraft
+                            .iter()
+                            .find(|a| matches!(a.phase, airstrike_engine::core::aircraft::FlightPhase::ColdDark))
+                        {
+                            let id = ac.id;
+                            world.dispatch_aircraft(id);
+                        }
+                    }
                     Event::Window {
                         win_event: sdl2::event::WindowEvent::Resized(w, h),
                         ..

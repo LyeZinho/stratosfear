@@ -59,6 +59,17 @@ impl World {
         world
     }
 
+    pub fn dispatch_aircraft(&mut self, id: u32) {
+        if let Some(ac) = self.aircraft.iter_mut().find(|a| a.id == id) {
+            if matches!(ac.phase, FlightPhase::ColdDark) {
+                ac.phase = FlightPhase::Preflight {
+                    elapsed_s: 0.0,
+                    required_s: 60.0,
+                };
+            }
+        }
+    }
+
     pub fn spawn_demo(&mut self) {
         let mut f1 = Aircraft::new(self.next_id, "EAGLE1", "F-16C", Side::Friendly);
         self.next_id += 1;
@@ -284,5 +295,32 @@ mod tests {
             found.is_visible(),
             "aircraft inside radar range should be visible"
         );
+    }
+
+    #[test]
+    fn test_dispatch_transitions_cold_dark_to_preflight() {
+        let mut world = World::new();
+        let mut ac = Aircraft::new(10, "DISPATCH1", "F-16C", Side::Friendly);
+        ac.phase = FlightPhase::ColdDark;
+        world.aircraft.push(ac);
+        world.dispatch_aircraft(10);
+        let found = world.aircraft.iter().find(|a| a.id == 10).unwrap();
+        assert!(
+            matches!(found.phase, FlightPhase::Preflight { .. }),
+            "dispatched aircraft should be in Preflight, got {:?}",
+            found.phase
+        );
+    }
+
+    #[test]
+    fn test_dispatch_only_works_on_cold_dark() {
+        let mut world = World::new();
+        let mut ac = Aircraft::new(11, "DISPATCH2", "F-16C", Side::Friendly);
+        ac.phase = FlightPhase::ColdDark;
+        world.aircraft.push(ac);
+        world.dispatch_aircraft(11);
+        world.dispatch_aircraft(11);
+        let found = world.aircraft.iter().find(|a| a.id == 11).unwrap();
+        assert!(matches!(found.phase, FlightPhase::Preflight { .. }));
     }
 }
