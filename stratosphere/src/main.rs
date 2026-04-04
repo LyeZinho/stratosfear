@@ -386,6 +386,13 @@ fn main() -> Result<(), String> {
                 tile_manager.render(&mut canvas, &camera);
                 draw_grid(&mut canvas, &camera);
                 ui::airport_layer::draw_airports(&mut canvas, &world.airports, &camera, true)?;
+                ui::airport_layer::draw_airport_labels(
+                    &mut canvas,
+                    texture_creator,
+                    &font,
+                    &world.airports,
+                    &camera,
+                )?;
 
                 sweep_angle = (sweep_angle + 3.0 * dt) % 360.0;
                 draw_radar_sweep(

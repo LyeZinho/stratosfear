@@ -3,8 +3,9 @@ use airstrike_engine::core::geo;
 use airstrike_engine::ui::camera::Camera;
 use sdl2::pixels::Color;
 use sdl2::rect::Rect;
-use sdl2::render::Canvas;
-use sdl2::video::Window;
+use sdl2::render::{Canvas, TextureCreator};
+use sdl2::ttf::Font;
+use sdl2::video::{Window, WindowContext};
 
 pub fn should_render(airport: &Airport, camera: &Camera) -> bool {
     match airport.airport_type {
@@ -49,6 +50,41 @@ pub fn draw_airports(
         canvas.set_draw_color(color);
         let half = size as i32 / 2;
         canvas.fill_rect(Rect::new(sx as i32 - half, sy as i32 - half, size, size))?;
+    }
+    Ok(())
+}
+
+pub fn draw_airport_labels(
+    canvas: &mut Canvas<Window>,
+    tc: &TextureCreator<WindowContext>,
+    font: &Font,
+    airports: &[Airport],
+    camera: &Camera,
+) -> Result<(), String> {
+    for airport in airports {
+        if !show_label(airport, camera) {
+            continue;
+        }
+        let (wx, wy) = geo::lat_lon_to_world(airport.lat, airport.lon, camera.zoom);
+        let (sx, sy) = camera.world_to_screen(wx, wy);
+        let surf = font
+            .render(&airport.icao)
+            .blended(Color::RGB(0, 220, 220))
+            .map_err(|e| e.to_string())?;
+        let tex = tc
+            .create_texture_from_surface(&surf)
+            .map_err(|e| e.to_string())?;
+        let sdl2::render::TextureQuery { width, height, .. } = tex.query();
+        canvas.copy(
+            &tex,
+            None,
+            Some(Rect::new(
+                sx as i32 + dot_size(airport) as i32 + 2,
+                sy as i32 - height as i32 / 2,
+                width,
+                height,
+            )),
+        )?;
     }
     Ok(())
 }
