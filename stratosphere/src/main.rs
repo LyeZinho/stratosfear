@@ -53,7 +53,7 @@ enum Scene {
     InGame,
 }
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Clone)]
 enum Selection {
     None,
     Aircraft(u32),
@@ -278,6 +278,14 @@ fn main() -> Result<(), String> {
                         y,
                         ..
                     } => {
+                        if let Selection::Airport(icao) = &selection.clone() {
+                            if let Some(airport) = world.airports.iter().find(|a| a.icao == *icao) {
+                                let panel = build_airport_panel(airport, &world.aircraft);
+                                if let Some(dispatch_id) = hit_test_panel_dispatch(&panel, x, y) {
+                                    world.dispatch_aircraft(dispatch_id);
+                                }
+                            }
+                        }
                         mouse_down = true;
                         last_mouse = (x, y);
                         current_mouse = (x, y);
@@ -435,6 +443,19 @@ fn main() -> Result<(), String> {
                     &world.brevity_log,
                     WINDOW_H,
                 )?;
+
+                if let Selection::Aircraft(id) = &selection {
+                    if let Some(ac) = world.aircraft.iter().find(|a| &a.id == id) {
+                        let panel = build_aircraft_panel(ac);
+                        ui::hud::render_hud_panel(&mut canvas, texture_creator, &font, &panel)?;
+                    }
+                }
+                if let Selection::Airport(icao) = &selection {
+                    if let Some(airport) = world.airports.iter().find(|a| &a.icao == icao) {
+                        let panel = build_airport_panel(airport, &world.aircraft);
+                        ui::hud::render_hud_panel(&mut canvas, texture_creator, &font, &panel)?;
+                    }
+                }
             }
         }
 
@@ -656,4 +677,123 @@ fn hit_test_map(
     }
 
     Selection::None
+}
+
+fn build_aircraft_panel(ac: &airstrike_engine::core::aircraft::Aircraft) -> ui::hud::HudPanel {
+    use airstrike_engine::core::aircraft::FlightPhase;
+    use ui::hud::{HudPanel, HudRow};
+
+    let phase_str = match &ac.phase {
+        FlightPhase::ColdDark => "Cold & Dark".into(),
+        FlightPhase::Preflight {
+            elapsed_s,
+            required_s,
+        } => {
+            format!("Preflight {:.0}/{:.0}s", elapsed_s, required_s)
+        }
+        FlightPhase::Taxiing { .. } => "Taxiing".into(),
+        FlightPhase::TakeoffRoll { .. } => "Takeoff Roll".into(),
+        FlightPhase::Climbing { target_alt_ft } => format!("Climbing → {:.0}ft", target_alt_ft),
+        FlightPhase::EnRoute => "En Route".into(),
+        FlightPhase::OnStation => "On Station".into(),
+        FlightPhase::Rtb => "RTB".into(),
+        FlightPhase::Landing { .. } => "Landing".into(),
+        FlightPhase::Landed => "Landed".into(),
+        FlightPhase::Maintenance { .. } => "Maintenance".into(),
+        FlightPhase::Destroyed => "Destroyed".into(),
+    };
+
+    HudPanel {
+        x: WINDOW_W as i32 - 230,
+        y: 10,
+        width: 220,
+        title: ac.callsign.clone(),
+        rows: vec![
+            HudRow::KeyValue("Model".into(), ac.model.clone()),
+            HudRow::KeyValue("Phase".into(), phase_str),
+            HudRow::KeyValue("Altitude".into(), format!("{:.0} ft", ac.altitude_ft)),
+            HudRow::KeyValue("Speed".into(), format!("{:.0} kts", ac.speed_knots)),
+            HudRow::KeyValue("Heading".into(), format!("{:.0}°", ac.heading_deg)),
+        ],
+    }
+}
+
+fn build_airport_panel(
+    airport: &airstrike_engine::core::airport::Airport,
+    aircraft: &[airstrike_engine::core::aircraft::Aircraft],
+) -> ui::hud::HudPanel {
+    use airstrike_engine::core::aircraft::FlightPhase;
+    use airstrike_engine::core::airport::AirportType;
+    use ui::hud::{HudAction, HudPanel, HudRow};
+
+    let type_str = match airport.airport_type {
+        AirportType::Large => "Large",
+        AirportType::Medium => "Medium",
+        AirportType::Small => "Small",
+        AirportType::Other => "Other",
+    };
+
+    let mut rows = vec![
+        HudRow::KeyValue("ICAO".into(), airport.icao.clone()),
+        HudRow::KeyValue("Type".into(), type_str.into()),
+        HudRow::KeyValue(
+            "Elevation".into(),
+            format!("{:.0} ft", airport.elevation_ft),
+        ),
+        HudRow::Separator,
+    ];
+
+    let cold_dark: Vec<_> = aircraft
+        .iter()
+        .filter(|ac| {
+            ac.home_airport_icao == airport.icao && matches!(ac.phase, FlightPhase::ColdDark)
+        })
+        .collect();
+
+    if cold_dark.is_empty() {
+        rows.push(HudRow::KeyValue("Dispatch".into(), "None available".into()));
+    } else {
+        for ac in cold_dark {
+            rows.push(HudRow::Button {
+                label: format!("{} — {}", ac.callsign, ac.model),
+                action: HudAction::Dispatch(ac.id),
+            });
+        }
+    }
+
+    HudPanel {
+        x: WINDOW_W as i32 - 230,
+        y: 10,
+        width: 220,
+        title: format!("{} — {}", airport.icao, airport.name),
+        rows,
+    }
+}
+
+fn hit_test_panel_dispatch(panel: &ui::hud::HudPanel, mx: i32, my: i32) -> Option<u32> {
+    use ui::hud::{HudAction, HudRow};
+
+    let line_h = 18i32;
+    let padding = 6i32;
+    let title_h = 20i32;
+
+    for (i, row) in panel.rows.iter().enumerate() {
+        if let HudRow::Button {
+            action: HudAction::Dispatch(id),
+            ..
+        } = row
+        {
+            let row_y = panel.y + title_h + padding + i as i32 * line_h;
+            let btn_rect = sdl2::rect::Rect::new(
+                panel.x + padding,
+                row_y,
+                panel.width.saturating_sub(padding as u32 * 2),
+                (line_h - 2) as u32,
+            );
+            if btn_rect.contains_point(sdl2::rect::Point::new(mx, my)) {
+                return Some(*id);
+            }
+        }
+    }
+    None
 }
