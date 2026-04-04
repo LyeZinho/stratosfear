@@ -163,8 +163,7 @@ fn main() -> Result<(), String> {
         tile_manager.request_tiles(&tiles);
         tile_manager.drain_channel(texture_creator);
 
-        // Physics + trail sampling
-        let dt = FRAME_DURATION.as_secs_f32().min(0.1);
+        let dt = frame_start.elapsed().as_secs_f32().min(0.1);
         world.update(dt);
         for state in &mut render_states {
             if let Some(ac) = world.aircraft.iter().find(|a| a.id == state.id) {
