@@ -1,6 +1,6 @@
 use sdl2::pixels::Color;
 use sdl2::rect::Rect;
-use sdl2::render::{Canvas, TextureCreator};
+use sdl2::render::{BlendMode, Canvas, TextureCreator};
 use sdl2::ttf::Font;
 use sdl2::video::{Window, WindowContext};
 
@@ -35,11 +35,22 @@ pub fn render_hud_panel(
     let title_h = 20i32;
     let panel_h = (title_h + panel.rows.len() as i32 * line_h + padding * 2) as u32;
 
-    canvas.set_draw_color(Color::RGBA(0, 0, 0, 200));
-    canvas.fill_rect(Rect::new(panel.x, panel.y, panel.width, panel_h))?;
+    canvas.set_blend_mode(BlendMode::Blend);
+    // Gradient Background
+    for i in 0..10 {
+        let alpha = 180 + (i * 4);
+        canvas.set_draw_color(Color::RGBA(0, 10 + i as u8, 20 + i as u8, alpha as u8));
+        let step_h = panel_h / 10;
+        let _ = canvas.fill_rect(Rect::new(panel.x, panel.y + (i as i32 * step_h as i32), panel.width, step_h.max(1)));
+    }
+    
+    // Cyan accent line at top
+    canvas.set_draw_color(Color::RGB(0, 200, 255));
+    let _ = canvas.fill_rect(Rect::new(panel.x, panel.y, panel.width, 2));
 
-    canvas.set_draw_color(Color::RGB(0, 120, 180));
-    canvas.fill_rect(Rect::new(panel.x, panel.y, panel.width, title_h as u32))?;
+    // Title background (darker)
+    canvas.set_draw_color(Color::RGBA(0, 40, 60, 220));
+    canvas.fill_rect(Rect::new(panel.x, panel.y + 2, panel.width, title_h as u32))?;
 
     render_text(
         canvas,
@@ -48,7 +59,7 @@ pub fn render_hud_panel(
         &panel.title,
         Color::RGB(255, 255, 255),
         panel.x + padding,
-        panel.y + 3,
+        panel.y + 4,
     )?;
 
     for (i, row) in panel.rows.iter().enumerate() {
@@ -61,23 +72,23 @@ pub fn render_hud_panel(
                     tc,
                     font,
                     &text,
-                    Color::RGB(0, 220, 120),
+                    Color::RGB(0, 255, 150),
                     panel.x + padding,
                     row_y,
                 )?;
             }
             HudRow::Separator => {
-                canvas.set_draw_color(Color::RGBA(80, 80, 80, 255));
+                canvas.set_draw_color(Color::RGBA(0, 100, 150, 100));
                 canvas.draw_line(
                     (panel.x + padding, row_y + line_h / 2),
                     (
-                        panel.x + panel.width.min(i32::MAX as u32) as i32 - padding,
+                        panel.x + panel.width as i32 - padding,
                         row_y + line_h / 2,
                     ),
                 )?;
             }
             HudRow::Button { label, .. } => {
-                canvas.set_draw_color(Color::RGBA(0, 80, 120, 220));
+                canvas.set_draw_color(Color::RGBA(0, 80, 120, 200));
                 canvas.fill_rect(Rect::new(
                     panel.x + padding,
                     row_y,
@@ -89,7 +100,7 @@ pub fn render_hud_panel(
                     tc,
                     font,
                     label,
-                    Color::RGB(0, 255, 180),
+                    Color::RGB(255, 255, 255),
                     panel.x + padding + 4,
                     row_y + 1,
                 )?;
@@ -100,7 +111,7 @@ pub fn render_hud_panel(
                     tc,
                     font,
                     &format!("> {}", text),
-                    Color::RGB(0, 180, 255),
+                    Color::RGB(0, 200, 255),
                     panel.x + padding,
                     row_y,
                 )?;

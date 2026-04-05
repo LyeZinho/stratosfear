@@ -1,6 +1,6 @@
 use crate::core::datalink::IffStatus;
 use crate::core::mission::MissionPlan;
-use crate::core::radar::haversine_km;
+use crate::core::radar::{haversine_km, AircraftRadar, radar_profile_for_model};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Side {
@@ -17,7 +17,7 @@ pub enum RadarType {
     AEWandC,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum FlightPhase {
     ColdDark,
     Preflight { elapsed_s: f32, required_s: f32 },
@@ -26,6 +26,11 @@ pub enum FlightPhase {
     Climbing { target_alt_ft: f32 },
     EnRoute,
     OnStation,
+    FormationHold {
+        orbit_lat: f64,
+        orbit_lon: f64,
+        orbit_radius_km: f32,
+    },
     Rtb,
     Landing { airport_lat: f64, airport_lon: f64 },
     Landed,
@@ -56,22 +61,25 @@ pub struct Aircraft {
     pub detection_confidence: f32,
 
     pub phase: FlightPhase,
-    pub radar_type: Option<RadarType>,
+    pub own_radar: Option<AircraftRadar>,
     pub iff: IffStatus,
     pub iff_track_s: f32,
     pub home_airport_icao: String,
     pub home_airport_lat: f64,
     pub home_airport_lon: f64,
+    pub home_runway_heading_deg: f32,
     pub mission: Option<MissionPlan>,
     pub waypoint_index: usize,
 }
 
 impl Aircraft {
     pub fn new(id: u32, callsign: impl Into<String>, model: impl Into<String>, side: Side) -> Self {
+        let callsign = callsign.into();
+        let model = model.into();
         Aircraft {
             id,
-            callsign: callsign.into(),
-            model: model.into(),
+            callsign,
+            model: model.clone(),
             side,
             lat: 0.0,
             lon: 0.0,
@@ -84,12 +92,13 @@ impl Aircraft {
             is_detected: false,
             detection_confidence: 0.0,
             phase: FlightPhase::ColdDark,
-            radar_type: None,
+            own_radar: radar_profile_for_model(&model),
             iff: IffStatus::Unknown,
             iff_track_s: 0.0,
             home_airport_icao: String::new(),
             home_airport_lat: 0.0,
             home_airport_lon: 0.0,
+            home_runway_heading_deg: 0.0,
             mission: None,
             waypoint_index: 0,
         }
@@ -121,7 +130,52 @@ impl Aircraft {
             self.fuel_kg = (self.fuel_kg - burn).max(0.0);
         }
 
+        self.apply_steering(dt);
         self.advance_phase(dt);
+    }
+
+    fn apply_steering(&mut self, dt: f32) {
+        use crate::core::radar::bearing_deg;
+        
+        let target_heading = match &self.phase {
+            FlightPhase::TakeoffRoll { .. } => self.home_airport_heading(),
+            FlightPhase::Climbing { .. } | FlightPhase::EnRoute => {
+                if let Some(m) = &self.mission {
+                    if let Some(wp) = m.waypoints.get(self.waypoint_index) {
+                        bearing_deg(self.lat, self.lon, wp.lat, wp.lon)
+                    } else {
+                        self.heading_deg
+                    }
+                } else {
+                    self.heading_deg
+                }
+            }
+            FlightPhase::FormationHold { orbit_lat, orbit_lon, orbit_radius_km: _ } => {
+                let b = bearing_deg(self.lat, self.lon, *orbit_lat, *orbit_lon);
+                // To orbit, we want to maintain a heading 90 degrees offset from the bearing to center
+                (b + 90.0).rem_euclid(360.0)
+            }
+            FlightPhase::Rtb => {
+               bearing_deg(self.lat, self.lon, self.home_airport_lat, self.home_airport_lon)
+            }
+            FlightPhase::Landing { airport_lat, airport_lon } => {
+               bearing_deg(self.lat, self.lon, *airport_lat, *airport_lon)
+            }
+            _ => self.heading_deg,
+        };
+
+        let turn_rate = 15.0; // degrees per second
+        let diff = (target_heading - self.heading_deg).rem_euclid(360.0);
+        let diff = if diff > 180.0 { diff - 360.0 } else { diff };
+
+        if diff.abs() > 0.1 {
+            let step = (turn_rate * dt).min(diff.abs());
+            self.heading_deg = (self.heading_deg + diff.signum() * step).rem_euclid(360.0);
+        }
+    }
+
+    fn home_airport_heading(&self) -> f32 {
+        self.home_runway_heading_deg
     }
 
     fn advance_phase(&mut self, dt: f32) {
@@ -170,6 +224,22 @@ impl Aircraft {
                     self.altitude_ft = target;
                     self.phase = FlightPhase::EnRoute;
                 }
+            }
+            FlightPhase::EnRoute => {
+                if let Some(m) = &self.mission {
+                    if let Some(wp) = m.waypoints.get(self.waypoint_index) {
+                        let dist = haversine_km(self.lat, self.lon, wp.lat, wp.lon);
+                        if dist < 1.0 { // 1km arrival radius
+                            self.waypoint_index += 1;
+                            if self.waypoint_index >= m.waypoints.len() {
+                                self.phase = FlightPhase::Rtb;
+                            }
+                        }
+                    }
+                }
+            }
+            FlightPhase::FormationHold { .. } => {
+                // Stay in orbit until changed by world logic (Phase 2 formation join)
             }
             FlightPhase::Landing {
                 airport_lat,
@@ -294,16 +364,16 @@ mod tests {
     }
 
     #[test]
-    fn test_aircraft_has_no_radar_by_default() {
+    fn test_aircraft_has_radar_for_f16c_by_default() {
         let ac = Aircraft::new(1, "TEST", "F-16C", Side::Friendly);
-        assert!(ac.radar_type.is_none());
+        assert!(ac.own_radar.is_some());
     }
 
     #[test]
-    fn test_aircraft_with_aesa_radar() {
-        let mut ac = Aircraft::new(1, "TEST", "F-16C", Side::Friendly);
-        ac.radar_type = Some(RadarType::AESA);
-        assert!(matches!(ac.radar_type, Some(RadarType::AESA)));
+    fn test_aircraft_with_aesa_radar_profile() {
+        use crate::core::aircraft::RadarType;
+        let ac = Aircraft::new(1, "TEST", "F-16C", Side::Friendly);
+        assert!(matches!(ac.own_radar.as_ref().unwrap().radar_type, RadarType::AESA));
     }
 
     #[test]

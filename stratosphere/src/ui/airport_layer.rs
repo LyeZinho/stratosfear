@@ -62,7 +62,7 @@ pub fn draw_airport_labels(
     camera: &Camera,
 ) -> Result<(), String> {
     for airport in airports {
-        if !show_label(airport, camera) {
+        if !should_render(airport, camera) || !show_label(airport, camera) {
             continue;
         }
         let (wx, wy) = geo::lat_lon_to_world(airport.lat, airport.lon, camera.zoom);
@@ -79,7 +79,7 @@ pub fn draw_airport_labels(
             &tex,
             None,
             Some(Rect::new(
-                sx as i32 + dot_size(airport) as i32 + 2,
+                sx as i32 - dot_size(airport) as i32 - width as i32 - 4,
                 sy as i32 - height as i32 / 2,
                 width,
                 height,

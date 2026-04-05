@@ -1,16 +1,19 @@
 use airstrike_engine::core::aircraft::{Aircraft, FlightPhase, Side};
 use airstrike_engine::core::airport::{Airport, AirportDb, AirportType};
-use airstrike_engine::core::radar::RadarSystem;
+use airstrike_engine::core::radar::{RadarSystem, bearing_deg};
+use airstrike_engine::core::datalink::{ContactPicture, Contact, IffStatus};
+use airstrike_engine::core::mission::MissionPlan;
 
 use super::missile::{resolve_hit, HitResult, Missile, MissilePhase};
 
 pub struct World {
     pub aircraft: Vec<Aircraft>,
     pub airports: Vec<Airport>,
-    pub radar: RadarSystem,
+    pub radars: Vec<RadarSystem>,
     pub credits: u32,
     pub game_time_s: f32,
     pub missiles: Vec<Missile>,
+    pub contact_picture: ContactPicture,
     pub brevity_log: Vec<String>,
     next_id: u32,
     next_missile_id: u32,
@@ -21,10 +24,11 @@ impl World {
         World {
             aircraft: Vec::new(),
             airports: Vec::new(),
-            radar: RadarSystem::new(38.716, -9.142, 50.0, 400.0),
+            radars: vec![RadarSystem::new(38.716, -9.142, 50.0, 400.0)],
             credits: 0,
             game_time_s: 0.0,
             missiles: Vec::new(),
+            contact_picture: ContactPicture::new(),
             brevity_log: Vec::new(),
             next_id: 1,
             next_missile_id: 1,
@@ -33,13 +37,44 @@ impl World {
 
     pub fn new_from_settings(country_iso: &str, starting_credits: u32, db: &AirportDb) -> Self {
         let airports: Vec<Airport> = db.for_country(country_iso).into_iter().cloned().collect();
+        // One radar per Large or Medium airport
+        use rand::Rng;
+        let mut rng = rand::thread_rng();
+
+        let radars: Vec<RadarSystem> = airports
+            .iter()
+            .filter_map(|a| {
+                let mut r = match a.airport_type {
+                    AirportType::Large => Some(RadarSystem::new(a.lat, a.lon, 50.0, 400.0)),
+                    AirportType::Medium => Some(RadarSystem::new(a.lat, a.lon, 30.0, 250.0)),
+                    _ => None,
+                };
+                if let Some(ref mut radar) = r {
+                    radar.sweep_angle = rng.gen_range(0.0..360.0);
+                    radar.sweep_dir = if rng.gen_bool(0.5) { 1.0 } else { -1.0 };
+                }
+                r
+            })
+            .collect();
+        // Fallback: if no airports, put a default radar
+        let mut radars = if radars.is_empty() {
+            vec![RadarSystem::new(0.0, 0.0, 50.0, 400.0)]
+        } else {
+            radars
+        };
+        // Randomize fallback too
+        if radars.len() == 1 && radars[0].position_lat == 0.0 {
+            radars[0].sweep_angle = rng.gen_range(0.0..360.0);
+            radars[0].sweep_dir = if rng.gen_bool(0.5) { 1.0 } else { -1.0 };
+        }
         let mut world = World {
             aircraft: Vec::new(),
             airports: airports.clone(),
-            radar: RadarSystem::new(38.716, -9.142, 50.0, 400.0),
+            radars,
             credits: starting_credits,
             game_time_s: 0.0,
             missiles: Vec::new(),
+            contact_picture: ContactPicture::new(),
             brevity_log: Vec::new(),
             next_id: 1,
             next_missile_id: 1,
@@ -60,11 +95,7 @@ impl World {
             ac.home_airport_icao = airport.icao.clone();
             ac.home_airport_lat = airport.lat;
             ac.home_airport_lon = airport.lon;
-            if matches!(airport.airport_type, AirportType::Large)
-                && world.radar.position_lat == 38.716
-            {
-                world.radar = RadarSystem::new(airport.lat, airport.lon, 50.0, 400.0);
-            }
+            ac.home_runway_heading_deg = airport.runway_heading_deg;
             world.aircraft.push(ac);
         }
         world
@@ -90,15 +121,19 @@ impl World {
         }
     }
 
-    pub fn dispatch_aircraft(&mut self, id: u32) {
+    pub fn dispatch_with_mission(&mut self, id: u32, plan: MissionPlan) -> bool {
         if let Some(ac) = self.aircraft.iter_mut().find(|a| a.id == id) {
             if matches!(ac.phase, FlightPhase::ColdDark) {
+                ac.mission = Some(plan);
+                ac.waypoint_index = 0;
                 ac.phase = FlightPhase::Preflight {
                     elapsed_s: 0.0,
-                    required_s: 60.0,
+                    required_s: 30.0,
                 };
+                return true;
             }
         }
+        false
     }
 
     pub fn spawn_demo(&mut self) {
@@ -148,24 +183,157 @@ impl World {
     }
 
     pub fn update(&mut self, dt: f32) {
+        self.game_time_s += dt;
+
+        // Rotate radars
+        let sweep_speed = 45.0; // deg/s
+        for radar in &mut self.radars {
+            radar.sweep_angle = (radar.sweep_angle + radar.sweep_dir * sweep_speed * dt).rem_euclid(360.0);
+        }
         for ac in &mut self.aircraft {
+            if let Some(ref mut radar) = ac.own_radar {
+                radar.sweep_angle = (radar.sweep_angle + radar.sweep_dir * sweep_speed * dt).rem_euclid(360.0);
+            }
             ac.update(dt);
         }
 
         use airstrike_engine::core::radar::rcs_for_model;
+        // Detected if ANY radar can see this aircraft
         let detections: Vec<bool> = self
             .aircraft
             .iter()
             .map(|ac| {
                 let (rf, rl) = rcs_for_model(&ac.model);
-                self.radar
-                    .is_detected(ac.lat, ac.lon, ac.altitude_ft, ac.heading_deg, rf, rl)
+                self.radars.iter().any(|radar| {
+                    radar.is_detected(ac.lat, ac.lon, ac.altitude_ft, ac.heading_deg, rf, rl)
+                })
             })
             .collect();
 
         for (ac, detected) in self.aircraft.iter_mut().zip(detections.iter()) {
             ac.is_detected = *detected;
             ac.detection_confidence = if *detected { 1.0 } else { 0.0 };
+        }
+
+        // Per-aircraft radar scanning and datalink update
+        self.contact_picture.prune(10.0, self.game_time_s);
+        
+        let mut new_contacts = Vec::new();
+        // 1. Ground radars update picture
+        for (i, ac) in self.aircraft.iter().enumerate() {
+            if detections[i] {
+                new_contacts.push(Contact {
+                    aircraft_id: ac.id,
+                    lat: ac.lat,
+                    lon: ac.lon,
+                    altitude_ft: ac.altitude_ft,
+                    heading_deg: ac.heading_deg,
+                    iff: match ac.side {
+                        Side::Friendly => IffStatus::Friendly,
+                        Side::Hostile => IffStatus::Hostile,
+                        Side::Unknown => IffStatus::Unknown,
+                    },
+                    last_updated_s: self.game_time_s,
+                });
+            }
+        }
+
+        // 2. Airborne radars scan and update picture
+        for i in 0..self.aircraft.len() {
+            let (radar_lat, radar_lon, _radar_alt, radar_heading, _side, radar_opt) = {
+                let ac = &self.aircraft[i];
+                if ac.phase == FlightPhase::Destroyed || ac.side != Side::Friendly {
+                    continue;
+                }
+                (ac.lat, ac.lon, ac.altitude_ft, ac.heading_deg, ac.side, ac.own_radar.clone())
+            };
+
+            if let Some(radar) = radar_opt {
+                use airstrike_engine::core::radar::rcs_for_model;
+                for j in 0..self.aircraft.len() {
+                    if i == j { continue; }
+                    let (target_lat, target_lon, target_alt, target_heading, target_model, target_id, target_side) = {
+                        let target = &self.aircraft[j];
+                        if target.phase == FlightPhase::Destroyed { continue; }
+                        (target.lat, target.lon, target.altitude_ft, target.heading_deg, target.model.clone(), target.id, target.side)
+                    };
+
+                    let (_rf, _rl) = rcs_for_model(&target_model);
+                    // Ground radar logic reused for airborne (RadarSystem is omni, but we can wrap it)
+                    // For now, let's just use a simple distance + FOV check
+                    let dist = airstrike_engine::core::radar::haversine_km(radar_lat, radar_lon, target_lat, target_lon);
+                    if dist <= radar.range_km {
+                        // Check FOV
+                        let b = bearing_deg(radar_lat, radar_lon, target_lat, target_lon);
+                        let diff = (b - radar_heading).abs();
+                        let diff = if diff > 180.0 { 360.0 - diff } else { diff };
+                        
+                        if radar.arc_deg >= 360.0 || diff <= radar.arc_deg / 2.0 {
+                            // Target is in radar volume
+                            new_contacts.push(Contact {
+                                aircraft_id: target_id,
+                                lat: target_lat,
+                                lon: target_lon,
+                                altitude_ft: target_alt,
+                                heading_deg: target_heading,
+                                iff: match target_side {
+                                    Side::Friendly => IffStatus::Friendly,
+                                    Side::Hostile => IffStatus::Hostile,
+                                    Side::Unknown => IffStatus::Unknown,
+                                },
+                                last_updated_s: self.game_time_s,
+                            });
+                        }
+                    }
+                }
+            }
+        }
+
+        for c in new_contacts {
+            self.contact_picture.upsert(c);
+        }
+
+        // 3. Update aircraft detection state from ContactPicture
+        for ac in &mut self.aircraft {
+            if ac.side == Side::Friendly {
+                ac.is_detected = true; // Friendlies always seen by "center"
+                ac.detection_confidence = 1.0;
+            } else {
+                let detected = self.contact_picture.contacts.contains_key(&ac.id);
+                ac.is_detected = detected;
+                ac.detection_confidence = if detected { 1.0 } else { 0.0 };
+            }
+        }
+
+        // 4. Formation coordination
+        let mut formation_status = std::collections::HashMap::new();
+        for ac in &self.aircraft {
+            if let Some(m) = &ac.mission {
+                if !m.formation_ids.is_empty() {
+                    let all_airborne = m.formation_ids.iter().all(|&id| {
+                        if let Some(member) = self.aircraft.iter().find(|a| a.id == id) {
+                            !matches!(member.phase, FlightPhase::ColdDark | FlightPhase::Preflight { .. } | FlightPhase::Taxiing { .. } | FlightPhase::TakeoffRoll { .. })
+                        } else { true }
+                    });
+                    formation_status.insert(ac.id, all_airborne);
+                }
+            }
+        }
+
+        for ac in &mut self.aircraft {
+            if let Some(&all_airborne) = formation_status.get(&ac.id) {
+                if !all_airborne {
+                    if matches!(ac.phase, FlightPhase::Climbing { .. } | FlightPhase::EnRoute) {
+                        ac.phase = FlightPhase::FormationHold {
+                            orbit_lat: ac.home_airport_lat,
+                            orbit_lon: ac.home_airport_lon,
+                            orbit_radius_km: 5.0,
+                        };
+                    }
+                } else if matches!(ac.phase, FlightPhase::FormationHold { .. }) {
+                    ac.phase = FlightPhase::EnRoute;
+                }
+            }
         }
 
         for m in &mut self.missiles {
@@ -373,7 +541,15 @@ mod tests {
         let mut ac = Aircraft::new(10, "DISPATCH1", "F-16C", Side::Friendly);
         ac.phase = FlightPhase::ColdDark;
         world.aircraft.push(ac);
-        world.dispatch_aircraft(10);
+        let plan = MissionPlan {
+            mission_type: MissionType::CAP,
+            waypoints: vec![],
+            loadout: vec![],
+            formation_ids: vec![],
+            roe: Roe::ReturnFireOnly,
+            fuel_reserve_pct: 0.15,
+        };
+        world.dispatch_with_mission(10, plan);
         let found = world.aircraft.iter().find(|a| a.id == 10).unwrap();
         assert!(
             matches!(found.phase, FlightPhase::Preflight { .. }),
@@ -388,8 +564,16 @@ mod tests {
         let mut ac = Aircraft::new(11, "DISPATCH2", "F-16C", Side::Friendly);
         ac.phase = FlightPhase::ColdDark;
         world.aircraft.push(ac);
-        world.dispatch_aircraft(11);
-        world.dispatch_aircraft(11);
+        let plan = MissionPlan {
+            mission_type: MissionType::CAP,
+            waypoints: vec![],
+            loadout: vec![],
+            formation_ids: vec![],
+            roe: Roe::ReturnFireOnly,
+            fuel_reserve_pct: 0.15,
+        };
+        world.dispatch_with_mission(11, plan.clone());
+        world.dispatch_with_mission(11, plan);
         let found = world.aircraft.iter().find(|a| a.id == 11).unwrap();
         assert!(matches!(found.phase, FlightPhase::Preflight { .. }));
     }

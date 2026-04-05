@@ -1,6 +1,6 @@
 use sdl2::pixels::Color;
 use sdl2::rect::Rect;
-use sdl2::render::{Canvas, TextureCreator};
+use sdl2::render::{BlendMode, Canvas, TextureCreator};
 use sdl2::ttf::Font;
 use sdl2::video::{Window, WindowContext};
 
@@ -11,6 +11,9 @@ pub fn render_brevity_log(
     log: &[String],
     window_h: u32,
 ) -> Result<(), String> {
+    if log.is_empty() {
+        return Ok(());
+    }
     let max_lines = 8usize;
     let line_h = 18i32;
     let padding = 6i32;
@@ -18,8 +21,10 @@ pub fn render_brevity_log(
     let panel_y = window_h as i32 - panel_h as i32 - 8;
     let panel_w = 500u32;
 
+    canvas.set_blend_mode(BlendMode::Blend);
     canvas.set_draw_color(Color::RGBA(0, 0, 0, 160));
     canvas.fill_rect(Rect::new(8, panel_y, panel_w, panel_h))?;
+    canvas.set_blend_mode(BlendMode::None);
 
     let recent: Vec<&String> = log
         .iter()

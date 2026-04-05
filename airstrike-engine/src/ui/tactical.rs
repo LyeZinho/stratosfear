@@ -141,16 +141,82 @@ pub fn draw_radar_sweep(
     let km_per_px = 156.543 / (1u32 << camera.zoom) as f32 * (radar_lat as f32).to_radians().cos();
     let radius_px = radar_range_km / km_per_px;
 
-    let arc_start = sweep_angle_deg - 15.0;
-    let arc_end = sweep_angle_deg + 15.0;
+    // Draw range circle (faint)
+    canvas.set_draw_color(Color::RGBA(0, 255, 100, 30));
+    draw_circle(canvas, rx as i32, ry as i32, radius_px as i32);
 
-    canvas.set_draw_color(Color::RGBA(0, 255, 100, 60));
-    for i in 0..=20 {
-        let angle = arc_start + (arc_end - arc_start) * i as f32 / 20.0;
-        let rad = angle.to_radians();
-        let x2 = (rx + radius_px * rad.sin()) as i32;
-        let y2 = (ry - radius_px * rad.cos()) as i32;
+    // Draw sweep line (brighter)
+    canvas.set_draw_color(Color::RGBA(0, 255, 100, 200));
+    let rad = sweep_angle_deg.to_radians();
+    let x2 = (rx + radius_px * rad.sin()) as i32;
+    let y2 = (ry - radius_px * rad.cos()) as i32;
+    let _ = canvas.draw_line((rx as i32, ry as i32), (x2, y2));
+    
+    // Draw a small arc for the "head" of the sweep (Optimized: 3 lines instead of 11)
+    for &offset in &[-1.0, 0.0, 1.0] {
+        let a = sweep_angle_deg + offset;
+        let r = a.to_radians();
+        let x2 = (rx + radius_px * r.sin()) as i32;
+        let y2 = (ry - radius_px * r.cos()) as i32;
         let _ = canvas.draw_line((rx as i32, ry as i32), (x2, y2));
+    }
+}
+
+pub fn draw_radar_cone(
+    canvas: &mut Canvas<Window>,
+    lat: f64,
+    lon: f64,
+    sweep_angle_deg: f32,
+    range_km: f32,
+    camera: &Camera,
+    color: Color,
+) {
+    let (wx, wy) = geo::lat_lon_to_world(lat, lon, camera.zoom);
+    let (rx, ry) = camera.world_to_screen(wx, wy);
+
+    let km_per_px = 156.543 / (1u32 << camera.zoom) as f32 * (lat as f64).to_radians().cos() as f32;
+    let radius_px = range_km / km_per_px;
+
+    // Draw range circle (faint)
+    canvas.set_draw_color(Color::RGBA(color.r, color.g, color.b, 30));
+    draw_circle(canvas, rx as i32, ry as i32, radius_px as i32);
+
+    // Draw sweep line (brighter)
+    canvas.set_draw_color(Color::RGBA(color.r, color.g, color.b, 160));
+    let rad = sweep_angle_deg.to_radians();
+    let x2 = (rx + radius_px * rad.sin()) as i32;
+    let y2 = (ry - radius_px * rad.cos()) as i32;
+    let _ = canvas.draw_line((rx as i32, ry as i32), (x2, y2));
+}
+
+fn draw_circle(canvas: &mut Canvas<Window>, cx: i32, cy: i32, radius: i32) {
+    let mut x = radius;
+    let mut y = 0;
+    let mut err = 0;
+
+    let mut iter = 0;
+    while x >= y {
+        // Only draw half the points to create a dashed effect and save 50% fill/draw calls
+        if iter % 2 == 0 {
+            let _ = canvas.draw_point((cx + x, cy + y));
+            let _ = canvas.draw_point((cx + y, cy + x));
+            let _ = canvas.draw_point((cx - y, cy + x));
+            let _ = canvas.draw_point((cx - x, cy + y));
+            let _ = canvas.draw_point((cx - x, cy - y));
+            let _ = canvas.draw_point((cx - y, cy - x));
+            let _ = canvas.draw_point((cx + y, cy - x));
+            let _ = canvas.draw_point((cx + x, cy - y));
+        }
+
+        if err <= 0 {
+            y += 1;
+            err += 2 * y + 1;
+        }
+        if err > 0 {
+            x -= 1;
+            err -= 2 * x + 1;
+        }
+        iter += 1;
     }
 }
 

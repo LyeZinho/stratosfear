@@ -6,17 +6,21 @@ use scenes::main_menu::{MainMenu, MenuAction};
 use scenes::mode_select::{ModeSelect, ModeSelectAction};
 use scenes::sandbox_settings::{SandboxAction, SandboxSettings};
 use std::time::{Duration, Instant};
+use ui::mission_panel::{MissionBriefingState, render_mission_briefing};
 
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 use sdl2::mouse::MouseButton;
 use sdl2::pixels::Color;
 use sdl2::rect::Rect;
+use sdl2::render::BlendMode;
 
 use airstrike_engine::ui::camera::Camera;
 use airstrike_engine::ui::grid::draw_grid;
-use airstrike_engine::ui::tactical::{draw_aircraft, draw_radar_sweep, AircraftRenderState};
+use airstrike_engine::ui::tactical::{draw_aircraft, draw_radar_sweep, draw_radar_cone, AircraftRenderState};
 use airstrike_engine::ui::tile_manager::{visible_tiles, TileManager};
+use airstrike_engine::core::mission::{Waypoint, WaypointAction};
+use airstrike_engine::core::aircraft::{FlightPhase, Side};
 use simulation::missile::MissilePhase;
 use simulation::world::World;
 
@@ -104,6 +108,7 @@ fn main() -> Result<(), String> {
     let mut current_mouse: (i32, i32) = (0, 0);
     let mut selection = Selection::None;
     let mut drag_start: (i32, i32) = (0, 0);
+    let mut mission_state = MissionBriefingState::new();
 
     let mut fps_timer = Instant::now();
     let mut frame_count = 0u32;
@@ -118,7 +123,7 @@ fn main() -> Result<(), String> {
         .map(|ac| AircraftRenderState::new(ac.id))
         .collect();
 
-    let mut sweep_angle: f32 = 0.0;
+    // Center camera on first airport so player sees their assets
 
     'running: loop {
         let frame_start = Instant::now();
@@ -248,7 +253,18 @@ fn main() -> Result<(), String> {
                                 .iter()
                                 .map(|ac| AircraftRenderState::new(ac.id))
                                 .collect();
+                            mission_state = MissionBriefingState::new();
                             scene = Scene::InGame;
+                            // Center camera on first airport so player sees their assets
+                            if let Some(first) = world.airports.first() {
+                                camera = Camera::new(
+                                    first.lat,
+                                    first.lon,
+                                    10,
+                                    camera.window_w,
+                                    camera.window_h,
+                                );
+                            }
                         }
                     }
                     Event::MouseMotion { x, y, .. } => {
@@ -270,7 +286,11 @@ fn main() -> Result<(), String> {
                         keycode: Some(Keycode::Escape),
                         ..
                     } => {
-                        scene = Scene::MainMenu(MainMenu::new());
+                        if selection != Selection::None {
+                            selection = Selection::None;
+                        } else {
+                            scene = Scene::MainMenu(MainMenu::new());
+                        }
                     }
                     Event::MouseButtonDown {
                         mouse_btn: MouseButton::Left,
@@ -278,11 +298,75 @@ fn main() -> Result<(), String> {
                         y,
                         ..
                     } => {
-                        if let Selection::Airport(icao) = &selection.clone() {
-                            if let Some(airport) = world.airports.iter().find(|a| a.icao == *icao) {
-                                let panel = build_airport_panel(airport, &world.aircraft);
-                                if let Some(dispatch_id) = hit_test_panel_dispatch(&panel, x, y) {
-                                    world.dispatch_aircraft(dispatch_id);
+                        let mut intercepted = false;
+                        
+                        // Mission Panel Hit Test
+                        let current_selection = selection.clone();
+                        if let Selection::Aircraft(id) = current_selection {
+                             if let Some(ac) = world.aircraft.iter().find(|a| a.id == id) {
+                                 if ac.phase == FlightPhase::ColdDark && ac.side == Side::Friendly {
+                                     let (win_w, win_h) = canvas.window().size();
+                                     let p_w = 700;
+                                     let p_h = win_h - 100;
+                                     let p_x = win_w as i32 - p_w - 20;
+                                     let p_y = 20;
+                                     let p_rect = Rect::new(p_x, p_y, p_w as u32, p_h as u32);
+                                     
+                                     if p_rect.contains_point((x, y)) {
+                                         intercepted = true;
+                                         // Close Button
+                                         let close_rect = Rect::new(p_x + p_w - 40, p_y + 10, 30, 30);
+                                         if close_rect.contains_point((x, y)) {
+                                             selection = Selection::None;
+                                         }
+                                         
+                                         // Tabs
+                                         for i in 0..4 {
+                                             let tx = p_x + 20 + i as i32 * 100;
+                                             let ty = p_y + 60;
+                                             let tab_rect = Rect::new(tx, ty, 80, 30);
+                                             if tab_rect.contains_point((x, y)) {
+                                                 mission_state.active_tab = i;
+                                             }
+                                         }
+                                         
+                                         // Waypoint Deletion
+                                         if mission_state.active_tab == 0 {
+                                             let mut to_remove = None;
+                                             for i in 0..mission_state.current_plan.waypoints.len() {
+                                                 let row_y = p_y + 140 + i as i32 * 25;
+                                                 let del_rect = Rect::new(p_x + 280, row_y, 20, 20);
+                                                 if del_rect.contains_point((x, y)) {
+                                                     to_remove = Some(i);
+                                                     break;
+                                                 }
+                                             }
+                                             if let Some(idx) = to_remove {
+                                                 mission_state.current_plan.waypoints.remove(idx);
+                                             }
+                                         }
+                                         
+                                         // Dispatch Button
+                                         let btn_y = p_y + p_h as i32 - 60;
+                                         let btn_rect = Rect::new(p_x + 100, btn_y, 200, 40);
+                                         if btn_rect.contains_point((x, y)) {
+                                             if !mission_state.current_plan.waypoints.is_empty() {
+                                                 world.dispatch_with_mission(id, mission_state.current_plan.clone());
+                                                 selection = Selection::None;
+                                             }
+                                         }
+                                     }
+                                 }
+                             }
+                        }
+
+                        if !intercepted {
+                            if let Selection::Airport(icao) = &selection.clone() {
+                                if let Some(airport) = world.airports.iter().find(|a| a.icao == *icao) {
+                                    let panel = build_airport_panel(airport, &world.aircraft);
+                                    if let Some(dispatch_id) = hit_test_panel_dispatch(&panel, x, y) {
+                                        world.dispatch_with_mission(dispatch_id, mission_state.current_plan.clone());
+                                    }
                                 }
                             }
                         }
@@ -290,6 +374,28 @@ fn main() -> Result<(), String> {
                         last_mouse = (x, y);
                         current_mouse = (x, y);
                         drag_start = (x, y);
+                    }
+                    Event::MouseButtonDown {
+                        mouse_btn: MouseButton::Right,
+                        x,
+                        y,
+                        ..
+                    } => {
+                        if let Selection::Aircraft(id) = &selection {
+                             if let Some(ac) = world.aircraft.iter().find(|a| a.id == *id) {
+                                 if ac.phase == FlightPhase::ColdDark {
+                                     let (wx, wy) = camera.screen_to_world(x as f32, y as f32);
+                                     let (lat, lon) = airstrike_engine::core::geo::world_to_lat_lon(wx, wy, camera.zoom);
+                                     mission_state.current_plan.waypoints.push(Waypoint {
+                                         lat,
+                                         lon,
+                                         altitude_ft: 25_000.0,
+                                         speed_knots: 450.0,
+                                         action: WaypointAction::FlyOver,
+                                     });
+                                 }
+                             }
+                        }
                     }
                     Event::MouseButtonUp {
                         mouse_btn: MouseButton::Left,
@@ -301,7 +407,25 @@ fn main() -> Result<(), String> {
                         let drag_dist =
                             (((x - drag_start.0).pow(2) + (y - drag_start.1).pow(2)) as f32).sqrt();
                         if drag_dist < 5.0 {
-                            selection = hit_test_map(x, y, &world, &camera);
+                            // Check if we are clicking inside the mission panel first
+                            let mut in_panel = false;
+                            if let Selection::Aircraft(id) = &selection {
+                                 if let Some(ac) = world.aircraft.iter().find(|a| a.id == *id) {
+                                     if ac.phase == FlightPhase::ColdDark && ac.side == Side::Friendly {
+                                         let (win_w, win_h) = canvas.window().size();
+                                         let p_w = 700;
+                                         let p_x = win_w as i32 - p_w - 20;
+                                         let p_rect = Rect::new(p_x, 20, p_w as u32, win_h - 100);
+                                         if p_rect.contains_point((x, y)) {
+                                             in_panel = true;
+                                         }
+                                     }
+                                 }
+                            }
+                            
+                            if !in_panel {
+                                selection = hit_test_map(x, y, &world, &camera);
+                            }
                         }
                     }
                     Event::MouseMotion { x, y, .. } => {
@@ -322,14 +446,8 @@ fn main() -> Result<(), String> {
                         keycode: Some(Keycode::D),
                         ..
                     } => {
-                        if let Some(ac) = world.aircraft.iter().find(|a| {
-                            matches!(
-                                a.phase,
-                                airstrike_engine::core::aircraft::FlightPhase::ColdDark
-                            )
-                        }) {
-                            let id = ac.id;
-                            world.dispatch_aircraft(id);
+                        if let Selection::Aircraft(id) = &selection {
+                             world.dispatch_with_mission(*id, mission_state.current_plan.clone());
                         }
                     }
                     Event::Window {
@@ -394,15 +512,26 @@ fn main() -> Result<(), String> {
                     &camera,
                 )?;
 
-                sweep_angle = (sweep_angle + 3.0 * dt) % 360.0;
-                draw_radar_sweep(
-                    &mut canvas,
-                    DEFAULT_LAT,
-                    DEFAULT_LON,
-                    400.0,
-                    sweep_angle,
-                    &camera,
-                );
+                for radar in &world.radars {
+                    let (wx, wy) = airstrike_engine::core::geo::lat_lon_to_world(radar.position_lat, radar.position_lon, camera.zoom);
+                    let (rx, ry) = camera.world_to_screen(wx, wy);
+                    let km_per_px = 156.543 / (1u32 << camera.zoom) as f32 * (radar.position_lat as f64).to_radians().cos() as f32;
+                    let radius_px = radar.range_km / km_per_px;
+                    
+                    // Simple frustum check
+                    if rx + radius_px < 0.0 || rx - radius_px > camera.window_w || ry + radius_px < 0.0 || ry - radius_px > camera.window_h {
+                        continue;
+                    }
+
+                    draw_radar_sweep(
+                        &mut canvas,
+                        radar.position_lat,
+                        radar.position_lon,
+                        radar.range_km,
+                        radar.sweep_angle,
+                        &camera,
+                    );
+                }
 
                 draw_aircraft(
                     &mut canvas,
@@ -412,6 +541,23 @@ fn main() -> Result<(), String> {
                     &render_states,
                     &camera,
                 );
+
+                // Draw Friendly Aircraft Radar Cones
+                for ac in &world.aircraft {
+                    if ac.side == Side::Friendly && ac.phase != FlightPhase::Destroyed {
+                        if let Some(radar) = &ac.own_radar {
+                            draw_radar_cone(
+                                &mut canvas,
+                                ac.lat,
+                                ac.lon,
+                                radar.sweep_angle,
+                                radar.range_km,
+                                &camera,
+                                Color::RGBA(80, 140, 255, 120),
+                            );
+                        }
+                    }
+                }
 
                 for missile in &world.missiles {
                     let (wx, wy) = airstrike_engine::core::geo::lat_lon_to_world(
@@ -452,9 +598,23 @@ fn main() -> Result<(), String> {
                 )?;
 
                 if let Selection::Aircraft(id) = &selection {
-                    if let Some(ac) = world.aircraft.iter().find(|a| &a.id == id) {
-                        let panel = build_aircraft_panel(ac);
-                        ui::hud::render_hud_panel(&mut canvas, texture_creator, &font, &panel)?;
+                    if let Some(idx) = world.aircraft.iter().position(|a| &a.id == id) {
+                        let ac = &world.aircraft[idx];
+                        let rs = &render_states[idx];
+                        if ac.phase == FlightPhase::ColdDark && ac.side == Side::Friendly {
+                            render_mission_briefing(
+                                &mut canvas,
+                                texture_creator,
+                                &font,
+                                ac,
+                                &mission_state,
+                                rs,
+                                &world,
+                            )?;
+                        } else {
+                            let panel = build_aircraft_panel(ac);
+                            ui::hud::render_hud_panel(&mut canvas, texture_creator, &font, &panel)?;
+                        }
                     }
                 }
                 if let Selection::Airport(icao) = &selection {
@@ -522,9 +682,11 @@ fn render_hud<'tc>(
     let line_h = 18i32;
     let padding = 8i32;
 
+    canvas.set_blend_mode(BlendMode::Blend);
     canvas.set_draw_color(Color::RGBA(0, 0, 0, 180));
     let bg = Rect::new(8, 8, 280, (4 * line_h + padding * 2) as u32);
     canvas.fill_rect(bg)?;
+    canvas.set_blend_mode(BlendMode::None);
 
     if let Some(textures) = &cache.textures {
         for (i, texture) in textures.iter().enumerate() {
@@ -566,23 +728,52 @@ fn render_main_menu(
     menu: &scenes::main_menu::MainMenu,
 ) -> Result<(), String> {
     let w = WINDOW_W as i32;
+    let h = WINDOW_H as i32;
+    
+    // Background Gradient Overlay
+    canvas.set_blend_mode(sdl2::render::BlendMode::Blend);
+    for i in 0..100 {
+        let alpha = (i as f32 / 100.0 * 180.0) as u8;
+        canvas.set_draw_color(Color::RGBA(0, 10, 20, alpha));
+        let _ = canvas.fill_rect(Rect::new(0, h - (i * h / 100), w as u32, (h/100) as u32));
+    }
+
     render_text_centered(
         canvas,
         font,
         tc,
-        "STRATOSPHERE",
-        Color::RGB(0, 200, 255),
-        180,
+        "AIRSTRIKE: STRATOSPHERE",
+        Color::RGB(0, 220, 255),
+        150,
         w,
     )?;
+    
+    canvas.set_draw_color(Color::RGB(0, 100, 150));
+    let _ = canvas.draw_line((w / 2 - 150, 200), (w / 2 + 150, 200));
+
     for (i, item) in menu.items().iter().enumerate() {
-        let color = if menu.selected == i || menu.hovered_index == Some(i) {
-            Color::RGB(0, 255, 100)
+        let is_selected = menu.selected == i || menu.hovered_index == Some(i);
+        let color = if is_selected {
+            Color::RGB(255, 255, 255)
         } else {
-            Color::RGB(0, 100, 50)
+            Color::RGB(0, 180, 200)
         };
-        render_text_centered(canvas, font, tc, item, color, 300 + i as i32 * 40, w)?;
+        
+        let py = 320 + i as i32 * 60;
+        if is_selected {
+            // Selection highight
+            canvas.set_draw_color(Color::RGBA(0, 255, 100, 40));
+            let _ = canvas.fill_rect(Rect::new(w / 2 - 100, py - 5, 200, 40));
+            canvas.set_draw_color(Color::RGB(0, 255, 100));
+            let _ = canvas.draw_rect(Rect::new(w / 2 - 100, py - 5, 200, 40));
+        }
+        
+        render_text_centered(canvas, font, tc, item, color, py, w)?;
     }
+    
+    // Footer hint
+    render_text_centered(canvas, font, tc, "ENGINE ALPHA v0.5.2", Color::RGB(60, 60, 60), h - 40, w)?;
+
     Ok(())
 }
 
@@ -593,22 +784,39 @@ fn render_mode_select(
     ms: &scenes::mode_select::ModeSelect,
 ) -> Result<(), String> {
     let w = WINDOW_W as i32;
+    let h = WINDOW_H as i32;
+    
+    // Background
+    canvas.set_blend_mode(sdl2::render::BlendMode::Blend);
+    canvas.set_draw_color(Color::RGBA(0, 10, 20, 200));
+    let _ = canvas.fill_rect(Rect::new(0, 0, w as u32, h as u32));
+
     render_text_centered(
         canvas,
         font,
         tc,
-        "SELECT MODE",
+        "SELECT OPERATIONAL MODE",
         Color::RGB(0, 200, 255),
-        180,
+        150,
         w,
     )?;
     for (i, item) in ms.items().iter().enumerate() {
-        let color = if ms.selected == i || ms.hovered_index == Some(i) {
-            Color::RGB(0, 255, 100)
+        let is_selected = ms.selected == i || ms.hovered_index == Some(i);
+        let color = if is_selected {
+            Color::RGB(255, 255, 255)
         } else {
-            Color::RGB(0, 100, 50)
+            Color::RGB(0, 180, 200)
         };
-        render_text_centered(canvas, font, tc, item, color, 300 + i as i32 * 40, w)?;
+        
+        let py = 320 + i as i32 * 60;
+        if is_selected {
+            canvas.set_draw_color(Color::RGBA(0, 255, 100, 40));
+            let _ = canvas.fill_rect(Rect::new(w / 2 - 150, py - 5, 300, 40));
+            canvas.set_draw_color(Color::RGB(0, 255, 100));
+            let _ = canvas.draw_rect(Rect::new(w / 2 - 150, py - 5, 300, 40));
+        }
+        
+        render_text_centered(canvas, font, tc, item, color, py, w)?;
     }
     Ok(())
 }
@@ -703,6 +911,7 @@ fn build_aircraft_panel(ac: &airstrike_engine::core::aircraft::Aircraft) -> ui::
         FlightPhase::Climbing { target_alt_ft } => format!("Climbing → {:.0}ft", target_alt_ft),
         FlightPhase::EnRoute => "En Route".into(),
         FlightPhase::OnStation => "On Station".into(),
+        FlightPhase::FormationHold { .. } => "Formation Hold".into(),
         FlightPhase::Rtb => "RTB".into(),
         FlightPhase::Landing { .. } => "Landing".into(),
         FlightPhase::Landed => "Landed".into(),

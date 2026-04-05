@@ -7,7 +7,7 @@ pub enum IffStatus {
     Hostile,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Contact {
     pub aircraft_id: u32,
     pub lat: f64,

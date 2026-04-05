@@ -15,6 +15,7 @@ pub struct Airport {
     pub country_iso: String,
     pub airport_type: AirportType,
     pub elevation_ft: f32,
+    pub runway_heading_deg: f32,
 }
 
 pub struct AirportDb {
@@ -95,13 +96,15 @@ impl AirportDb {
             let lon: f64 = get(idx_lon).parse().unwrap_or(0.0);
             let elevation_ft: f32 = get(idx_elev).parse().unwrap_or(0.0);
             airports.push(Airport {
-                icao: get(idx_ident),
+                icao: get(idx_ident.clone()),
                 name: get(idx_name),
                 lat,
                 lon,
                 country_iso: get(idx_country),
                 airport_type,
                 elevation_ft,
+                // Derive a plausible runway heading from ICAO (ident) bits
+                runway_heading_deg: ((get(idx_ident).as_bytes().iter().map(|&b| b as u32).sum::<u32>() % 36) * 10) as f32,
             });
         }
         AirportDb { airports }

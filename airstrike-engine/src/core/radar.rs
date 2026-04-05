@@ -1,14 +1,40 @@
+use crate::core::aircraft::RadarType;
+
 const FEET_TO_METERS: f32 = 0.3048;
 const NOTCH_ASPECT_THRESHOLD: f32 = 0.15;
 
 /// A ground-based or airborne radar system
 pub struct RadarSystem {
     pub range_km: f32,
-    pub position_lat: f64, // radar position in decimal degrees
+    pub position_lat: f64,
     pub position_lon: f64,
-    pub altitude_m: f32, // radar altitude in metres above sea level
-    #[allow(dead_code)] // reserved for directional radar (Phase 4)
-    pub scan_angle_deg: f32, // full scan cone width (360.0 = omni)
+    pub altitude_m: f32,
+    #[allow(dead_code)]
+    pub scan_angle_deg: f32,
+    pub sweep_angle: f32,
+    /// +1.0 = clockwise, -1.0 = counter-clockwise
+    pub sweep_dir: f32,
+}
+
+#[derive(Debug, Clone)]
+pub struct AircraftRadar {
+    pub radar_type: RadarType,
+    pub range_km: f32,
+    pub arc_deg: f32,
+    pub sweep_angle: f32,
+    pub sweep_dir: f32,
+}
+
+impl AircraftRadar {
+    pub fn new(radar_type: RadarType, range_km: f32, arc_deg: f32) -> Self {
+        AircraftRadar {
+            radar_type,
+            range_km,
+            arc_deg,
+            sweep_angle: 0.0,
+            sweep_dir: 1.0,
+        }
+    }
 }
 
 impl RadarSystem {
@@ -19,6 +45,8 @@ impl RadarSystem {
             altitude_m,
             range_km,
             scan_angle_deg: 360.0,
+            sweep_angle: 0.0,
+            sweep_dir: 1.0,
         }
     }
 
@@ -117,6 +145,17 @@ pub fn rcs_for_model(model: &str) -> (f32, f32) {
         "F-35A" => (0.001, 0.01),
         "C-130" => (80.0, 120.0),
         _ => (5.0, 10.0),
+    }
+}
+
+pub fn radar_profile_for_model(model: &str) -> Option<AircraftRadar> {
+    match model {
+        "F-16C" => Some(AircraftRadar::new(RadarType::AESA, 140.0, 120.0)),
+        "Gripen" => Some(AircraftRadar::new(RadarType::AESA, 120.0, 120.0)),
+        "Su-27" => Some(AircraftRadar::new(RadarType::PESA, 100.0, 120.0)),
+        "F-35A" => Some(AircraftRadar::new(RadarType::AESA, 180.0, 140.0)),
+        "AEW&C" => Some(AircraftRadar::new(RadarType::AEWandC, 450.0, 360.0)),
+        _ => None,
     }
 }
 
