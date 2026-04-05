@@ -67,14 +67,14 @@ pub fn render_mission_briefing<'tc>(
     draw_text(canvas, tc, font, &title, panel_x + 20, panel_y + 20, Color::RGB(255, 255, 255))?;
 
     // Tabs
-    let tabs = ["ROUTE", "LOADOUT", "FUEL", "AIRPORT"];
+    let tabs = ["ROUTE", "LOADOUT", "FUEL", "AIRPORT", "TASKING"];
     for (i, &name) in tabs.iter().enumerate() {
-        let tx = panel_x + 20 + i as i32 * 100;
+        let tx = panel_x + 20 + i as i32 * 80; // Slightly tighter spacing
         let ty = panel_y + 60;
         let color = if state.active_tab == i { Color::RGB(255, 255, 0) } else { Color::RGB(150, 150, 150) };
         draw_text(canvas, tc, font, name, tx, ty, color)?;
         if state.active_tab == i {
-            canvas.draw_line((tx, ty + 25), (tx + 80, ty + 25))?;
+            canvas.draw_line((tx, ty + 25), (tx + 60, ty + 25))?;
         }
     }
 
@@ -83,18 +83,27 @@ pub fn render_mission_briefing<'tc>(
         1 => render_loadout_tab(canvas, tc, font, panel_x, panel_y, &state.current_plan)?,
         2 => render_fuel_tab(canvas, tc, font, panel_x, panel_y, ac, &state.current_plan)?,
         3 => render_airport_tab(canvas, tc, font, panel_x, panel_y, ac, world)?,
+        4 => render_tasking_tab(canvas, tc, font, panel_x, panel_y, world)?,
         _ => {}
     }
 
     // Dispatch Button
     let btn_y = panel_y + panel_h as i32 - 60;
-    let is_valid = !state.current_plan.waypoints.is_empty();
+    
+    let home_base = world.airbases.iter().find(|b| b.icao == ac.home_airport_icao);
+    let runway_ready = home_base.map(|b| b.can_takeoff()).unwrap_or(true);
+    let is_valid = !state.current_plan.waypoints.is_empty() && runway_ready;
+    
     let btn_color = if is_valid { Color::RGB(0, 255, 100) } else { Color::RGB(100, 100, 100) };
     
     canvas.set_draw_color(btn_color);
     let btn_rect = Rect::new(panel_x + 100, btn_y, 200, 40);
     canvas.fill_rect(btn_rect)?;
     draw_text(canvas, tc, font, "DISPATCH", panel_x + 155, btn_y + 10, Color::RGB(0, 0, 0))?;
+
+    if !runway_ready {
+        draw_text(canvas, tc, font, "WARNING: RUNWAY DAMAGED", panel_x + 320, btn_y + 10, Color::RGB(255, 50, 50))?;
+    }
 
     Ok(())
 }
@@ -235,5 +244,30 @@ pub fn render_airport_tab(
         }
     }
 
+    Ok(())
+}
+fn render_tasking_tab(
+    canvas: &mut Canvas<Window>,
+    tc: &TextureCreator<WindowContext>,
+    font: &sdl2::ttf::Font,
+    px: i32,
+    py: i32,
+    world: &crate::simulation::world::World,
+) -> Result<(), String> {
+    draw_text(canvas, tc, font, "CAMPAIGN OBJECTIVES", px + 20, py + 120, Color::RGB(0, 200, 255))?;
+    
+    for (i, obj) in world.objectives.iter().enumerate() {
+        let y = py + 160 + i as i32 * 100;
+        let color = if obj.is_completed { Color::RGB(100, 255, 100) } else { Color::RGB(255, 255, 255) };
+        let status = if obj.is_completed { "[COMPLETED]" } else { "[ACTIVE]" };
+        
+        draw_text(canvas, tc, font, &format!("{} {}", status, obj.title), px + 20, y, color)?;
+        draw_text(canvas, tc, font, &obj.description, px + 20, y + 25, Color::RGB(180, 180, 180))?;
+        draw_text(canvas, tc, font, &format!("Reward: {} Credits", obj.reward_credits), px + 20, y + 45, Color::RGB(255, 255, 0))?;
+        
+        canvas.set_draw_color(Color::RGBA(255, 255, 255, 30));
+        canvas.draw_line((px + 20, y + 70), (px + 600, y + 70))?;
+    }
+    
     Ok(())
 }

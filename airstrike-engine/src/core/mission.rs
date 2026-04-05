@@ -29,12 +29,30 @@ pub enum Roe {
     WeaponsFree,
     ReturnFireOnly,
     HoldFire,
+    EngageHostiles,
 }
 
 #[derive(Debug, Clone)]
 pub struct WeaponSlot {
     pub weapon_id: String,
     pub count: u8,
+}
+
+#[derive(Debug, Clone)]
+pub enum ObjectiveType {
+    InterceptAsset { target_id: u32 },
+    PatrolArea { lat: f64, lon: f64, radius_km: f32 },
+    DefendBase { icao: String },
+}
+
+#[derive(Debug, Clone)]
+pub struct MissionObjective {
+    pub id: u32,
+    pub title: String,
+    pub description: String,
+    pub objective_type: ObjectiveType,
+    pub is_completed: bool,
+    pub reward_credits: u32,
 }
 
 #[derive(Debug, Clone)]

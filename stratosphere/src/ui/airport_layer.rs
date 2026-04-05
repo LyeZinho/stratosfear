@@ -33,7 +33,6 @@ pub fn draw_airports(
     canvas: &mut Canvas<Window>,
     airports: &[Airport],
     camera: &Camera,
-    is_player_country: bool,
 ) -> Result<(), String> {
     for airport in airports {
         if !should_render(airport, camera) {
@@ -41,11 +40,17 @@ pub fn draw_airports(
         }
         let (wx, wy) = geo::lat_lon_to_world(airport.lat, airport.lon, camera.zoom);
         let (sx, sy) = camera.world_to_screen(wx, wy);
+
+        // Frustum culling: Only draw if on screen
+        if sx < -20.0 || sx > camera.window_w + 20.0 || sy < -20.0 || sy > camera.window_h + 20.0 {
+            continue;
+        }
+
         let size = dot_size(airport);
-        let color = if is_player_country {
-            Color::RGB(0, 200, 200)
-        } else {
-            Color::RGB(150, 50, 50)
+        let color = match airport.side {
+            airstrike_engine::core::aircraft::Side::Friendly => Color::RGB(0, 200, 200),
+            airstrike_engine::core::aircraft::Side::Hostile => Color::RGB(150, 50, 50),
+            _ => Color::RGB(100, 100, 100),
         };
         canvas.set_draw_color(color);
         let half = size as i32 / 2;
@@ -67,6 +72,12 @@ pub fn draw_airport_labels(
         }
         let (wx, wy) = geo::lat_lon_to_world(airport.lat, airport.lon, camera.zoom);
         let (sx, sy) = camera.world_to_screen(wx, wy);
+
+        // Frustum culling for labels (using a 150px buffer)
+        if sx < -150.0 || sx > camera.window_w + 150.0 || sy < -150.0 || sy > camera.window_h + 150.0 {
+            continue;
+        }
+
         let surf = font
             .render(&airport.icao)
             .blended(Color::RGB(0, 220, 220))

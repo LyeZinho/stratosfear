@@ -200,7 +200,7 @@ impl TileManager {
     /// Dispatch background worker threads for tiles not yet loaded or in-flight.
     /// Caps concurrent workers at `MAX_WORKERS`.
     pub fn request_tiles(&mut self, tiles: &[TileCoords]) {
-        const MAX_WORKERS: usize = 4;
+        const MAX_WORKERS: usize = 12; // Increased for faster "pre-caching" feel
         for &coords in tiles {
             if self.worker_count >= MAX_WORKERS {
                 break;

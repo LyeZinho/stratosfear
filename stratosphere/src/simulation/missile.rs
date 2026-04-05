@@ -12,41 +12,42 @@ pub enum MissilePhase {
 
 #[derive(Debug, Clone)]
 pub struct Missile {
-    pub id: u32,
-    pub launcher_id: u32,
+    pub _id: u32,
+    pub _launcher_id: u32,
     pub target_id: u32,
     pub lat: f64,
     pub lon: f64,
     pub target_lat: f64,
     pub target_lon: f64,
-    pub altitude_ft: f32,
+    pub _altitude_ft: f32,
     pub phase: MissilePhase,
     pub fuel_s: f32,
     pub weapon_id: &'static str,
 }
 
 impl Missile {
+    #[allow(dead_code)]
     pub fn new(
-        id: u32,
-        launcher_id: u32,
+        _id: u32,
+        _launcher_id: u32,
         target_id: u32,
         lat: f64,
         lon: f64,
-        alt_ft: f32,
+        _alt_ft: f32,
         weapon_id: &'static str,
     ) -> Self {
         let fuel_s = weapon_by_id(weapon_id)
             .map(|w| w.range_km / (w.speed_knots * 0.5144 / 1000.0))
             .unwrap_or(60.0);
         Missile {
-            id,
-            launcher_id,
+            _id,
+            _launcher_id,
             target_id,
             lat,
             lon,
             target_lat: lat,
             target_lon: lon,
-            altitude_ft: alt_ft,
+            _altitude_ft: _alt_ft,
             phase: MissilePhase::Midcourse,
             fuel_s,
             weapon_id,

@@ -2,6 +2,7 @@ mod scenes;
 mod simulation;
 mod ui;
 
+use crate::ui::base_panel::render_base_panel;
 use scenes::main_menu::{MainMenu, MenuAction};
 use scenes::mode_select::{ModeSelect, ModeSelectAction};
 use scenes::sandbox_settings::{SandboxAction, SandboxSettings};
@@ -17,7 +18,7 @@ use sdl2::render::BlendMode;
 
 use airstrike_engine::ui::camera::Camera;
 use airstrike_engine::ui::grid::draw_grid;
-use airstrike_engine::ui::tactical::{draw_aircraft, draw_radar_sweep, draw_radar_cone, AircraftRenderState};
+use airstrike_engine::ui::tactical::{draw_aircraft, draw_radar_sweep, AircraftRenderState};
 use airstrike_engine::ui::tile_manager::{visible_tiles, TileManager};
 use airstrike_engine::core::mission::{Waypoint, WaypointAction};
 use airstrike_engine::core::aircraft::{FlightPhase, Side};
@@ -127,6 +128,8 @@ fn main() -> Result<(), String> {
 
     'running: loop {
         let frame_start = Instant::now();
+        let dt = fps_timer.elapsed().as_secs_f32().min(0.1);
+        fps_timer = Instant::now();
 
         for event in event_pump.poll_iter() {
             match &mut scene {
@@ -255,8 +258,8 @@ fn main() -> Result<(), String> {
                                 .collect();
                             mission_state = MissionBriefingState::new();
                             scene = Scene::InGame;
-                            // Center camera on first airport so player sees their assets
-                            if let Some(first) = world.airports.first() {
+                            // Center camera on first friendly airport so player sees their assets
+                            if let Some(first) = world.airports.iter().find(|a| a.side == Side::Friendly) {
                                 camera = Camera::new(
                                     first.lat,
                                     first.lon,
@@ -321,10 +324,10 @@ fn main() -> Result<(), String> {
                                          }
                                          
                                          // Tabs
-                                         for i in 0..4 {
-                                             let tx = p_x + 20 + i as i32 * 100;
+                                         for i in 0..5 { // Fixed: check all 5 tabs
+                                             let tx = p_x + 20 + i as i32 * 80; // Fixed spacing
                                              let ty = p_y + 60;
-                                             let tab_rect = Rect::new(tx, ty, 80, 30);
+                                             let tab_rect = Rect::new(tx, ty, 70, 30);
                                              if tab_rect.contains_point((x, y)) {
                                                  mission_state.active_tab = i;
                                              }
@@ -466,7 +469,6 @@ fn main() -> Result<(), String> {
         tile_manager.request_tiles(&tiles);
         tile_manager.drain_channel(texture_creator);
 
-        let dt = frame_start.elapsed().as_secs_f32().min(0.1);
 
         frame_count += 1;
         if fps_timer.elapsed() >= Duration::from_secs(1) {
@@ -490,8 +492,12 @@ fn main() -> Result<(), String> {
             }
             Scene::InGame => {
                 world.update(dt);
+                // Optimize: Build a quick lookup map for render states
+                use std::collections::HashMap;
+                let ac_map: HashMap<u32, &airstrike_engine::core::aircraft::Aircraft> = world.aircraft.iter().map(|a| (a.id, a)).collect();
+
                 for state in &mut render_states {
-                    if let Some(ac) = world.aircraft.iter().find(|a| a.id == state.id) {
+                    if let Some(ac) = ac_map.get(&state.id) {
                         if ac.side == airstrike_engine::core::aircraft::Side::Friendly
                             || ac.is_visible()
                         {
@@ -503,7 +509,7 @@ fn main() -> Result<(), String> {
                 tile_manager.render_placeholders(&mut canvas, &camera);
                 tile_manager.render(&mut canvas, &camera);
                 draw_grid(&mut canvas, &camera);
-                ui::airport_layer::draw_airports(&mut canvas, &world.airports, &camera, true)?;
+                ui::airport_layer::draw_airports(&mut canvas, &world.airports, &camera)?;
                 ui::airport_layer::draw_airport_labels(
                     &mut canvas,
                     texture_creator,
@@ -513,12 +519,28 @@ fn main() -> Result<(), String> {
                 )?;
 
                 for radar in &world.radars {
+                    let mut should_render = false;
+                    
+                    // Always show friendly ground radars or if selected
+                    let is_friendly = radar.side == airstrike_engine::core::aircraft::Side::Friendly;
+
+                    if is_friendly {
+                        should_render = true;
+                    } else if let Selection::Airport(ref icao) = selection {
+                         if let Some(apt) = world.airports.iter().find(|a| &a.icao == icao) {
+                             if (apt.lat - radar.position_lat).abs() < 0.01 && (apt.lon - radar.position_lon).abs() < 0.01 {
+                                 should_render = true;
+                             }
+                         }
+                    }
+                    
+                    if !should_render { continue; }
+
                     let (wx, wy) = airstrike_engine::core::geo::lat_lon_to_world(radar.position_lat, radar.position_lon, camera.zoom);
                     let (rx, ry) = camera.world_to_screen(wx, wy);
                     let km_per_px = 156.543 / (1u32 << camera.zoom) as f32 * (radar.position_lat as f64).to_radians().cos() as f32;
                     let radius_px = radar.range_km / km_per_px;
                     
-                    // Simple frustum check
                     if rx + radius_px < 0.0 || rx - radius_px > camera.window_w || ry + radius_px < 0.0 || ry - radius_px > camera.window_h {
                         continue;
                     }
@@ -542,19 +564,20 @@ fn main() -> Result<(), String> {
                     &camera,
                 );
 
-                // Draw Friendly Aircraft Radar Cones
-                for ac in &world.aircraft {
-                    if ac.side == Side::Friendly && ac.phase != FlightPhase::Destroyed {
-                        if let Some(radar) = &ac.own_radar {
-                            draw_radar_cone(
-                                &mut canvas,
-                                ac.lat,
-                                ac.lon,
-                                radar.sweep_angle,
-                                radar.range_km,
-                                &camera,
-                                Color::RGBA(80, 140, 255, 120),
-                            );
+                // Draw Selected Friendly Aircraft Radar Sweep (Restored visuals)
+                if let Selection::Aircraft(id) = selection {
+                    if let Some(ac) = world.aircraft.iter().find(|a| a.id == id) {
+                        if ac.side == airstrike_engine::core::aircraft::Side::Friendly && ac.phase != airstrike_engine::core::aircraft::FlightPhase::Destroyed {
+                            if let Some(radar) = &ac.own_radar {
+                                draw_radar_sweep(
+                                    &mut canvas,
+                                    ac.lat,
+                                    ac.lon,
+                                    radar.range_km,
+                                    radar.sweep_angle,
+                                    &camera,
+                                );
+                            }
                         }
                     }
                 }
@@ -574,6 +597,13 @@ fn main() -> Result<(), String> {
                     };
                     canvas.set_draw_color(color);
                     canvas.fill_rect(Rect::new(sx as i32 - 2, sy as i32 - 2, 4, 4))?;
+                }
+
+                // Render selected aircraft route
+                if let Selection::Aircraft(id) = &selection {
+                    if let Some(ac) = world.aircraft.iter().find(|a| a.id == *id) {
+                        airstrike_engine::ui::tactical::draw_route(&mut canvas, ac, &camera);
+                    }
                 }
 
                 let tracked_count = world.aircraft.iter().filter(|a| a.is_detected).count();
@@ -619,8 +649,13 @@ fn main() -> Result<(), String> {
                 }
                 if let Selection::Airport(icao) = &selection {
                     if let Some(airport) = world.airports.iter().find(|a| &a.icao == icao) {
-                        let panel = build_airport_panel(airport, &world.aircraft);
-                        ui::hud::render_hud_panel(&mut canvas, texture_creator, &font, &panel)?;
+                        // Priority: If it's a managed airbase, show the airbase panel
+                        if let Some(base) = world.airbases.iter().find(|b| &b.icao == icao) {
+                            render_base_panel(&mut canvas, texture_creator, &font, base)?;
+                        } else {
+                            let panel = build_airport_panel(airport, &world.aircraft);
+                            ui::hud::render_hud_panel(&mut canvas, texture_creator, &font, &panel)?;
+                        }
                     }
                 }
             }
@@ -679,19 +714,32 @@ fn render_hud<'tc>(
         cache.sizes = sizes;
     }
 
-    let line_h = 18i32;
-    let padding = 8i32;
+    let line_h = 20i32;
+    let padding = 10i32;
+    let w = 300;
+    let h = (4 * line_h + padding * 2) as u32;
 
     canvas.set_blend_mode(BlendMode::Blend);
-    canvas.set_draw_color(Color::RGBA(0, 0, 0, 180));
-    let bg = Rect::new(8, 8, 280, (4 * line_h + padding * 2) as u32);
-    canvas.fill_rect(bg)?;
-    canvas.set_blend_mode(BlendMode::None);
+    // Premium Glassmorphism Background
+    for i in 0..10 {
+        let alpha = 140 + (i * 6);
+        canvas.set_draw_color(Color::RGBA(0, 10 + i as u8, 20 + i as u8, alpha as u8));
+        let step_h = h / 10;
+        let _ = canvas.fill_rect(Rect::new(10, 10 + (i as i32 * step_h as i32), w, step_h.max(1)));
+    }
+    
+    // Cyan top accent
+    canvas.set_draw_color(Color::RGB(0, 200, 255));
+    let _ = canvas.fill_rect(Rect::new(10, 10, w, 2));
+    
+    // Subtle border
+    canvas.set_draw_color(Color::RGBA(0, 200, 255, 60));
+    let _ = canvas.draw_rect(Rect::new(10, 10, w, h));
 
     if let Some(textures) = &cache.textures {
         for (i, texture) in textures.iter().enumerate() {
-            let (w, h) = cache.sizes[i];
-            let dst = Rect::new(padding + 8, padding + 8 + i as i32 * line_h, w, h);
+            let (tw, th) = cache.sizes[i];
+            let dst = Rect::new(10 + padding, 10 + padding + i as i32 * line_h, tw, th);
             canvas.copy(texture, None, Some(dst))?;
         }
     }
@@ -919,18 +967,34 @@ fn build_aircraft_panel(ac: &airstrike_engine::core::aircraft::Aircraft) -> ui::
         FlightPhase::Destroyed => "Destroyed".into(),
     };
 
+    let mut rows = vec![
+        HudRow::KeyValue("Model".into(), ac.model.clone()),
+        HudRow::KeyValue("Phase".into(), phase_str),
+        HudRow::KeyValue("Altitude".into(), format!("{:.0} ft", ac.altitude_ft)),
+        HudRow::KeyValue("Speed".into(), format!("{:.0} kts", ac.speed_knots)),
+        HudRow::KeyValue("Heading".into(), format!("{:.0}°", ac.heading_deg)),
+        HudRow::Separator,
+    ];
+
+    if let Some(m) = &ac.mission {
+        let wp_count = m.waypoints.len();
+        let cur_wp = ac.waypoint_index + 1;
+        rows.push(HudRow::KeyValue("Mission".into(), format!("{}/{}", cur_wp, wp_count)));
+        if let Some(wp) = m.waypoints.get(ac.waypoint_index) {
+             let dist = airstrike_engine::core::radar::haversine_km(ac.lat, ac.lon, wp.lat, wp.lon);
+             rows.push(HudRow::KeyValue("WP Dist".into(), format!("{:.1} km", dist)));
+        }
+    }
+
+    let fuel_pct = (ac.fuel_kg / 5000.0 * 100.0).clamp(0.0, 100.0); // Rough estimate
+    rows.push(HudRow::KeyValue("Fuel".into(), format!("{:.0}%", fuel_pct)));
+
     HudPanel {
         x: WINDOW_W as i32 - 230,
         y: 10,
         width: 220,
         title: ac.callsign.clone(),
-        rows: vec![
-            HudRow::KeyValue("Model".into(), ac.model.clone()),
-            HudRow::KeyValue("Phase".into(), phase_str),
-            HudRow::KeyValue("Altitude".into(), format!("{:.0} ft", ac.altitude_ft)),
-            HudRow::KeyValue("Speed".into(), format!("{:.0} kts", ac.speed_knots)),
-            HudRow::KeyValue("Heading".into(), format!("{:.0}°", ac.heading_deg)),
-        ],
+        rows,
     }
 }
 

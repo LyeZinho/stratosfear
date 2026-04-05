@@ -1,7 +1,14 @@
-use crate::core::aircraft::RadarType;
+use crate::core::aircraft::{RadarType, Side};
 
 const FEET_TO_METERS: f32 = 0.3048;
 const NOTCH_ASPECT_THRESHOLD: f32 = 0.15;
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum RadarTier {
+    Tier1, // Old pulse-doppler, blind to low-alt/stealth
+    Tier2, // Modern PD
+    Tier3, // AESA / GCI - High fidelity
+}
 
 /// A ground-based or airborne radar system
 pub struct RadarSystem {
@@ -9,10 +16,10 @@ pub struct RadarSystem {
     pub position_lat: f64,
     pub position_lon: f64,
     pub altitude_m: f32,
-    #[allow(dead_code)]
+    pub tier: RadarTier, // NEW
+    pub side: Side,      // NEW
     pub scan_angle_deg: f32,
     pub sweep_angle: f32,
-    /// +1.0 = clockwise, -1.0 = counter-clockwise
     pub sweep_dir: f32,
 }
 
@@ -38,12 +45,14 @@ impl AircraftRadar {
 }
 
 impl RadarSystem {
-    pub fn new(lat: f64, lon: f64, altitude_m: f32, range_km: f32) -> Self {
+    pub fn new(lat: f64, lon: f64, altitude_m: f32, range_km: f32, side: Side) -> Self {
         RadarSystem {
             position_lat: lat,
             position_lon: lon,
             altitude_m,
             range_km,
+            tier: RadarTier::Tier1, // Default to Tier 1
+            side,
             scan_angle_deg: 360.0,
             sweep_angle: 0.0,
             sweep_dir: 1.0,
@@ -123,6 +132,22 @@ impl RadarSystem {
         let horizon_km = Self::horizon_range_km(self.altitude_m, target_altitude_m);
         if distance_km > horizon_km {
             return false;
+        }
+
+        // Tier-based detection constraints (Gap Filler mechanics)
+        match self.tier {
+            RadarTier::Tier1 => {
+                // Tier 1 is blind to low altitude (clutter) and stealthy targets
+                if target_altitude_ft < 1500.0 { return false; }
+                if dynamic_rcs < 0.5 { return false; }
+            }
+            RadarTier::Tier2 => {
+                if target_altitude_ft < 500.0 { return false; }
+            }
+            RadarTier::Tier3 => {
+                // GCI/AESA has superior clutter rejection
+                if target_altitude_ft < 100.0 { return false; }
+            }
         }
 
         let aspect = aspect_dot(target_heading_deg, bearing_from_target_to_radar);

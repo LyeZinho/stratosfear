@@ -5,7 +5,6 @@ pub enum SandboxAction {
         country_iso: String,
         starting_credits: u32,
     },
-    Back,
     None,
 }
 
@@ -52,11 +51,6 @@ impl SandboxSettings {
         }
     }
 
-    pub fn selected_country_iso(&self) -> Option<&str> {
-        self.country_list
-            .get(self.selected_country)
-            .map(|(iso, _)| iso.as_str())
-    }
 
     pub fn handle_mouse_move(&mut self, mx: i32, my: i32, window_w: i32) {
         self.hovered_index = self.hit_index(mx, my, window_w);

@@ -299,6 +299,37 @@ pub fn draw_aircraft<'tc>(
     }
 }
 
+pub fn draw_route(canvas: &mut Canvas<Window>, ac: &Aircraft, camera: &Camera) {
+    if let Some(m) = &ac.mission {
+        canvas.set_draw_color(Color::RGBA(0, 255, 150, 150));
+        let mut last_pos = None;
+        
+        // Line from aircraft current position to first waypoint
+        if let Some(first) = m.waypoints.get(ac.waypoint_index) {
+             let (wx, wy) = geo::lat_lon_to_world(ac.lat, ac.lon, camera.zoom);
+             let (sx, sy) = camera.world_to_screen(wx, wy);
+             let (tx, ty) = geo::lat_lon_to_world(first.lat, first.lon, camera.zoom);
+             let (tsx, tsy) = camera.world_to_screen(tx, ty);
+             let _ = canvas.draw_line((sx as i32, sy as i32), (tsx as i32, tsy as i32));
+        }
+
+        for (i, wp) in m.waypoints.iter().enumerate() {
+            if i < ac.waypoint_index { continue; }
+            let (wx, wy) = geo::lat_lon_to_world(wp.lat, wp.lon, camera.zoom);
+            let (sx, sy) = camera.world_to_screen(wx, wy);
+            let sx = sx as i32;
+            let sy = sy as i32;
+            
+            if let Some((lx, ly)) = last_pos {
+                let _ = canvas.draw_line((lx, ly), (sx, sy));
+            }
+            // Draw a small square for the waypoint
+            let _ = canvas.draw_rect(Rect::new(sx - 3, sy - 3, 6, 6));
+            last_pos = Some((sx, sy));
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Unit tests (pure math — no SDL2 needed)
 // ---------------------------------------------------------------------------

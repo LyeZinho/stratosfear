@@ -6,14 +6,12 @@ use sdl2::video::{Window, WindowContext};
 
 pub enum HudAction {
     Dispatch(u32),
-    Close,
 }
 
 pub enum HudRow {
     KeyValue(String, String),
     Separator,
     Button { label: String, action: HudAction },
-    ListItem { text: String, id: u32 },
 }
 
 pub struct HudPanel {
@@ -35,19 +33,8 @@ pub fn render_hud_panel(
     let title_h = 20i32;
     let panel_h = (title_h + panel.rows.len() as i32 * line_h + padding * 2) as u32;
 
-    canvas.set_blend_mode(BlendMode::Blend);
-    // Gradient Background
-    for i in 0..10 {
-        let alpha = 180 + (i * 4);
-        canvas.set_draw_color(Color::RGBA(0, 10 + i as u8, 20 + i as u8, alpha as u8));
-        let step_h = panel_h / 10;
-        let _ = canvas.fill_rect(Rect::new(panel.x, panel.y + (i as i32 * step_h as i32), panel.width, step_h.max(1)));
-    }
+    draw_glass_panel(canvas, panel.x, panel.y, panel.width, panel_h)?;
     
-    // Cyan accent line at top
-    canvas.set_draw_color(Color::RGB(0, 200, 255));
-    let _ = canvas.fill_rect(Rect::new(panel.x, panel.y, panel.width, 2));
-
     // Title background (darker)
     canvas.set_draw_color(Color::RGBA(0, 40, 60, 220));
     canvas.fill_rect(Rect::new(panel.x, panel.y + 2, panel.width, title_h as u32))?;
@@ -57,9 +44,9 @@ pub fn render_hud_panel(
         tc,
         font,
         &panel.title,
-        Color::RGB(255, 255, 255),
         panel.x + padding,
         panel.y + 4,
+        Color::RGB(255, 255, 255),
     )?;
 
     for (i, row) in panel.rows.iter().enumerate() {
@@ -72,9 +59,9 @@ pub fn render_hud_panel(
                     tc,
                     font,
                     &text,
-                    Color::RGB(0, 255, 150),
                     panel.x + padding,
                     row_y,
+                    Color::RGB(0, 255, 150),
                 )?;
             }
             HudRow::Separator => {
@@ -100,20 +87,9 @@ pub fn render_hud_panel(
                     tc,
                     font,
                     label,
-                    Color::RGB(255, 255, 255),
                     panel.x + padding + 4,
                     row_y + 1,
-                )?;
-            }
-            HudRow::ListItem { text, .. } => {
-                render_text(
-                    canvas,
-                    tc,
-                    font,
-                    &format!("> {}", text),
-                    Color::RGB(0, 200, 255),
-                    panel.x + padding,
-                    row_y,
+                    Color::RGB(255, 255, 255),
                 )?;
             }
         }
@@ -122,14 +98,37 @@ pub fn render_hud_panel(
     Ok(())
 }
 
-fn render_text(
+pub fn draw_glass_panel(
+    canvas: &mut Canvas<Window>,
+    x: i32,
+    y: i32,
+    width: u32,
+    height: u32,
+) -> Result<(), String> {
+    canvas.set_blend_mode(BlendMode::Blend);
+    // Gradient Background
+    for i in 0..10 {
+        let alpha = 180 + (i * 4);
+        canvas.set_draw_color(Color::RGBA(0, 10 + i as u8, 20 + i as u8, alpha as u8));
+        let step_h = height / 10;
+        let _ = canvas.fill_rect(Rect::new(x, y + (i as i32 * step_h as i32), width, step_h.max(1)));
+    }
+    
+    // Cyan accent line at top
+    canvas.set_draw_color(Color::RGB(0, 200, 255));
+    let _ = canvas.fill_rect(Rect::new(x, y, width, 2));
+    canvas.set_blend_mode(BlendMode::None);
+    Ok(())
+}
+
+pub fn render_text(
     canvas: &mut Canvas<Window>,
     tc: &TextureCreator<WindowContext>,
     font: &Font,
     text: &str,
-    color: Color,
     x: i32,
     y: i32,
+    color: Color,
 ) -> Result<(), String> {
     if text.is_empty() {
         return Ok(());

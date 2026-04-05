@@ -87,13 +87,17 @@ impl Aircraft {
             heading_deg: 0.0,
             speed_knots: 400.0,
             fuel_kg: 3_000.0,
-            fuel_burn_kg_per_s: 1.5,
+            fuel_burn_kg_per_s: 0.1,
             rcs_base: 1.0,
             is_detected: false,
             detection_confidence: 0.0,
             phase: FlightPhase::ColdDark,
             own_radar: radar_profile_for_model(&model),
-            iff: IffStatus::Unknown,
+            iff: match side {
+                Side::Friendly => IffStatus::Friendly,
+                Side::Hostile => IffStatus::Hostile,
+                Side::Unknown => IffStatus::Unknown,
+            },
             iff_track_s: 0.0,
             home_airport_icao: String::new(),
             home_airport_lat: 0.0,
@@ -101,6 +105,17 @@ impl Aircraft {
             home_runway_heading_deg: 0.0,
             mission: None,
             waypoint_index: 0,
+        }
+    }
+
+    pub fn apply_spec(&mut self, spec: &crate::core::aircraft_specs::AircraftSpec) {
+        self.model = spec.model.to_string();
+        self.speed_knots = spec.cruise_speed_knots;
+        self.fuel_kg = spec.fuel_capacity_kg;
+        self.fuel_burn_kg_per_s = spec.fuel_burn_kg_per_s;
+        if let Some(ref mut radar) = self.own_radar {
+            radar.range_km = spec.radar_range_km;
+            radar.arc_deg = spec.radar_fov_deg;
         }
     }
 
@@ -204,7 +219,7 @@ impl Aircraft {
                 }
             }
             FlightPhase::TakeoffRoll { speed_knots } => {
-                *speed_knots += 10.0 * dt;
+                *speed_knots += 35.0 * dt; // Increased acceleration (was 10.0)
                 if *speed_knots >= 160.0 {
                     let target = self
                         .mission
@@ -218,7 +233,7 @@ impl Aircraft {
                 }
             }
             FlightPhase::Climbing { target_alt_ft } => {
-                self.altitude_ft += 2000.0 * dt;
+                self.altitude_ft += 3500.0 * dt; // Faster climb (was 2000.0)
                 let target = *target_alt_ft;
                 if self.altitude_ft >= target {
                     self.altitude_ft = target;

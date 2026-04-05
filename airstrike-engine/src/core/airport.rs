@@ -16,6 +16,7 @@ pub struct Airport {
     pub airport_type: AirportType,
     pub elevation_ft: f32,
     pub runway_heading_deg: f32,
+    pub side: crate::core::aircraft::Side,
 }
 
 pub struct AirportDb {
@@ -95,14 +96,22 @@ impl AirportDb {
             let lat: f64 = get(idx_lat).parse().unwrap_or(0.0);
             let lon: f64 = get(idx_lon).parse().unwrap_or(0.0);
             let elevation_ft: f32 = get(idx_elev).parse().unwrap_or(0.0);
+            let country_iso = get(idx_country);
+            let side = if country_iso == "PT" {
+                crate::core::aircraft::Side::Friendly
+            } else {
+                crate::core::aircraft::Side::Hostile
+            };
+
             airports.push(Airport {
                 icao: get(idx_ident.clone()),
                 name: get(idx_name),
                 lat,
                 lon,
-                country_iso: get(idx_country),
+                country_iso,
                 airport_type,
                 elevation_ft,
+                side,
                 // Derive a plausible runway heading from ICAO (ident) bits
                 runway_heading_deg: ((get(idx_ident).as_bytes().iter().map(|&b| b as u32).sum::<u32>() % 36) * 10) as f32,
             });
@@ -222,6 +231,7 @@ XXXX,heliport,Some Heliport,38.0,-9.0,100,PT
         let db = AirportDb::load(csv.as_bytes());
         assert_eq!(db.airports.len(), 1);
         assert_eq!(db.airports[0].name, "Airport, Main");
+        assert_eq!(db.airports[0].side, crate::core::aircraft::Side::Hostile);
     }
 
     #[test]

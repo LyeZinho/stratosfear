@@ -1,6 +1,5 @@
 pub enum ModeSelectAction {
     GoToSandboxSettings,
-    Back,
     None,
 }
 
